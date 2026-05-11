@@ -137,7 +137,7 @@ SYSTEM_APPEND_DASHBOARD = (
     "- No Read-back after Write/Edit\n"
     "- No Read of files whose contents are in .scaffold_context\n"
     "- Read .scaffold_context FIRST to understand all generated files\n"
-    "- useDashboardData.ts, enriched.ts, enrich.ts, formatters.ts, ai.ts, chat-context.ts, ChatWidget.tsx: NEVER touch — use as-is\n"
+    "- useDashboardData.ts, enriched.ts, enrich.ts, formatters.ts, ai.ts, ChatWidget.tsx: NEVER touch — use as-is\n"
     "- src/config/ai-features.ts: MAY edit — set AI_PHOTO_SCAN['Entity'] = true to enable photo scan in dialogs\n"
     "- Rules of Hooks: ALL hooks (useState, useEffect, useMemo, useCallback) MUST be BEFORE any early returns (loading/error). Never place a hook after 'if (loading) return' or 'if (error) return'.\n"
     "- IMPORT HYGIENE: Only import what you actually use. TypeScript strict mode errors on unused imports. BEFORE calling Write, mentally trace every import — if it doesn't appear in the JSX/logic body, remove it.\n"
@@ -153,7 +153,7 @@ SYSTEM_APPEND_ORCHESTRATOR = (
     "- NEVER use Bash for file operations (no cat, echo, heredoc, >, >>). ALWAYS use Read/Write/Edit tools.\n"
     "- index.css: NEVER touch — pre-generated design system. CRUD pages/dialogs: NEVER touch.\n"
     "- Layout.tsx: NEVER touch — sidebar navigation is pre-generated.\n"
-    "- useDashboardData.ts, enriched.ts, enrich.ts, formatters.ts, ai.ts, chat-context.ts, ChatWidget.tsx: NEVER touch\n"
+    "- useDashboardData.ts, enriched.ts, enrich.ts, formatters.ts, ai.ts, ChatWidget.tsx: NEVER touch\n"
     "- Rules of Hooks: ALL hooks MUST be BEFORE any early returns.\n"
     "- IMPORT HYGIENE: Only import what you actually use.\n"
     "- After 'npm run build' succeeds, STOP immediately."
@@ -182,10 +182,6 @@ async def main():
     else:
         system_append = SYSTEM_APPEND_ORCHESTRATOR
 
-    # Disable thinking for Phase 1 (saves tokens, faster).
-    # Phase 2 / all needs thinking enabled — thinking=disabled + resume crashes the CLI.
-    thinking_opt = {"type": "disabled"} if build_phase == "dashboard" else None
-
     options = ClaudeAgentOptions(
         hooks={
             "PostToolUse": [HookMatcher(matcher=None, hooks=[_on_post_tool_use], timeout=60)],
@@ -195,7 +191,7 @@ async def main():
             "preset": "claude_code",
             "append": system_append,
         },
-        **({"thinking": thinking_opt} if thinking_opt else {}),
+        thinking={"type": "disabled"},
         setting_sources=["project"],
         permission_mode="bypassPermissions",
         disallowed_tools=["TodoWrite", "NotebookEdit", "WebFetch", "ExitPlanMode", "SlashCommand"],
@@ -208,7 +204,12 @@ async def main():
         options.agents = agents
 
     # Session-Resume Unterstützung
+    # BUG: agents + resume crashes the Claude CLI (tested SDK 0.1.50 + 0.1.58).
+    # Skip resume when agents are registered — Phase 2 doesn't need conversation history.
     resume_session_id = os.getenv('RESUME_SESSION_ID')
+    if agents and resume_session_id:
+        print(f"[KLAR] Skipping resume (agents + resume = SDK crash)")
+        resume_session_id = None
     if resume_session_id:
         options.resume = resume_session_id
         print(f"[KLAR] Resuming session: {resume_session_id}")

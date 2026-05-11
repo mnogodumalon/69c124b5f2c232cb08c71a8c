@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,15 +8,21 @@ import {
   SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { IconFileText, IconUpload } from '@tabler/icons-react';
 import { lookupKey } from '@/lib/formatters';
 
-const KLAR_BASE = 'http://localhost:8000/claude';
+// Empty PROXY_BASE → relative URLs (dashboard and form-proxy share the domain).
+const PROXY_BASE = '';
+const APP_ID = '69c12470c2204e2aa999bcb8';
+const SUBMIT_PATH = `/rest/apps/${APP_ID}/records`;
+const ALTCHA_SCRIPT_SRC = 'https://cdn.jsdelivr.net/npm/altcha/dist/altcha.min.js';
 
-async function submitPublicForm(fields: Record<string, unknown>) {
-  const res = await fetch(`${KLAR_BASE}/public/69c124b5f2c232cb08c71a8c/69c12470c2204e2aa999bcb8/submit`, {
+async function submitPublicForm(fields: Record<string, unknown>, captchaToken: string) {
+  const res = await fetch(`${PROXY_BASE}/api${SUBMIT_PATH}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Captcha-Token': captchaToken,
+    },
     body: JSON.stringify({ fields }),
   });
   if (!res.ok) {
@@ -26,17 +32,6 @@ async function submitPublicForm(fields: Record<string, unknown>) {
   return res.json();
 }
 
-async function publicUploadFile(file: File): Promise<string> {
-  const fd = new FormData();
-  fd.append('file', file, file.name);
-  const res = await fetch(`${KLAR_BASE}/public/69c124b5f2c232cb08c71a8c/upload`, {
-    method: 'POST',
-    body: fd,
-  });
-  if (!res.ok) throw new Error('Upload failed');
-  const data = await res.json();
-  return data.url;
-}
 
 function cleanFields(fields: Record<string, unknown>): Record<string, unknown> {
   const cleaned: Record<string, unknown> = {};
@@ -60,7 +55,16 @@ export default function PublicFormScope2IndirekteEnergieemissionen() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [fileUploading, setFileUploading] = useState(false);
+  const captchaRef = useRef<HTMLElement | null>(null);
+
+  // Load the ALTCHA web component script once per page.
+  useEffect(() => {
+    if (document.querySelector(`script[src="${ALTCHA_SCRIPT_SRC}"]`)) return;
+    const s = document.createElement('script');
+    s.src = ALTCHA_SCRIPT_SRC;
+    s.defer = true;
+    document.head.appendChild(s);
+  }, []);
 
   useEffect(() => {
     const hash = window.location.hash;
@@ -72,12 +76,23 @@ export default function PublicFormScope2IndirekteEnergieemissionen() {
     if (Object.keys(prefill).length) setFields(prev => ({ ...prefill, ...prev }));
   }, []);
 
+  function readCaptchaToken(): string | null {
+    const el = captchaRef.current as any;
+    if (!el) return null;
+    return el.value || el.getAttribute('value') || null;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const token = readCaptchaToken();
+    if (!token) {
+      setError('Bitte warte auf die Spam-Prüfung und versuche es erneut.');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      await submitPublicForm(cleanFields(fields));
+      await submitPublicForm(cleanFields(fields), token);
       setSubmitted(true);
     } catch (err: any) {
       setError(err.message || 'Etwas ist schiefgelaufen. Bitte versuche es erneut.');
@@ -199,74 +214,13 @@ export default function PublicFormScope2IndirekteEnergieemissionen() {
               rows={3}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="s2_nachweis">Nachweis / Beleg (Datei-Upload)</Label>
-            {fields.s2_nachweis ? (
-              <div className="flex items-center gap-3 rounded-lg border p-2">
-                <div className="relative h-14 w-14 shrink-0 rounded-md bg-muted overflow-hidden">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <IconFileText size={20} className="text-muted-foreground" />
-                  </div>
-                  <img
-                    src={fields.s2_nachweis}
-                    alt=""
-                    className="relative h-full w-full object-cover"
-                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate text-foreground">{fields.s2_nachweis.split("/").pop()}</p>
-                  <div className="flex gap-2 mt-1">
-                    <label
-                      className="text-xs text-primary hover:underline cursor-pointer"
-                    >
-                      Ändern
-                      <input
-                        type="file"
-                        accept="image/*,.pdf"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          try {
-                            const fileUrl = await publicUploadFile(file);
-                            setFields(f => ({ ...f, s2_nachweis: fileUrl }));
-                          } catch (err) { console.error('Upload failed:', err); }
-                        }}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="text-xs text-muted-foreground hover:text-destructive"
-                      onClick={() => setFields(f => ({ ...f, s2_nachweis: undefined }))}
-                    >
-                      Entfernen
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <label
-                className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-muted-foreground/25 p-4 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
-              >
-                <IconUpload size={20} className="text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Datei hochladen</span>
-                <input
-                  type="file"
-                  accept="image/*,.pdf"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    try {
-                      const fileUrl = await publicUploadFile(file);
-                      setFields(f => ({ ...f, s2_nachweis: fileUrl }));
-                    } catch (err) { console.error('Upload failed:', err); }
-                  }}
-                />
-              </label>
-            )}
-          </div>
+
+          <altcha-widget
+            ref={captchaRef as any}
+            challengeurl={`${PROXY_BASE}/api/_challenge?path=${encodeURIComponent(SUBMIT_PATH)}`}
+            auto="onsubmit"
+            hidefooter
+          />
 
           {error && (
             <div className="text-sm text-destructive bg-destructive/10 rounded-lg p-3">
@@ -274,7 +228,7 @@ export default function PublicFormScope2IndirekteEnergieemissionen() {
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={submitting || fileUploading}>
+          <Button type="submit" className="w-full" disabled={submitting}>
             {submitting ? 'Wird gesendet...' : 'Absenden'}
           </Button>
         </form>

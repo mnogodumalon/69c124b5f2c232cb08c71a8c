@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type ReactElement } from 'react';
-import { IconSparkles, IconX, IconSend, IconPaperclip, IconLoader2, IconCopy, IconCheck, IconFileTypePdf, IconMaximize, IconMinimize } from '@tabler/icons-react';
+import { IconSparkles, IconX, IconSend, IconPaperclip, IconLoader2, IconCopy, IconCheck, IconFileTypePdf, IconFileSpreadsheet, IconMaximize, IconMinimize } from '@tabler/icons-react';
 import { fileToDataUri } from '@/lib/ai';
 import { useActions } from '@/context/ActionsContext';
 
@@ -26,10 +26,10 @@ function Linkify({ text }: { text: string }) {
 }
 
 function renderInline(text: string) {
-  // Bold, italic, inline code, links — applied left-to-right
+  // Bold, italic, inline code, images, links — applied left-to-right
   const tokens: Array<{ type: string; text: string; href?: string }> = [];
-  // Regex order: code, bold, italic, md-link
-  const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(\[[^\]]+\]\([^)]+\))/g;
+  // Regex order: code, bold, italic, md-image, md-link (image must come before link)
+  const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(!\[[^\]]*\]\([^)]+\))|(\[[^\]]+\]\([^)]+\))/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
@@ -39,6 +39,10 @@ function renderInline(text: string) {
     else if (m[2]) tokens.push({ type: 'bold', text: raw.slice(2, -2) });
     else if (m[3]) tokens.push({ type: 'italic', text: raw.slice(1, -1) });
     else if (m[4]) {
+      const im = raw.match(/!\[([^\]]*)\]\(([^)]+)\)/);
+      if (im) tokens.push({ type: 'image', text: im[1], href: im[2] });
+    }
+    else if (m[5]) {
       const lm = raw.match(/\[([^\]]+)\]\(([^)]+)\)/);
       if (lm) tokens.push({ type: 'link', text: lm[1], href: lm[2] });
     }
@@ -51,6 +55,14 @@ function renderInline(text: string) {
       case 'code': return <code key={i} className="bg-black/5 rounded px-1 py-0.5 text-[0.85em] font-mono">{t.text}</code>;
       case 'bold': return <strong key={i}><Linkify text={t.text} /></strong>;
       case 'italic': return <em key={i}><Linkify text={t.text} /></em>;
+      case 'image': {
+        const safe = t.href && /^(https?:|data:image\/)/i.test(t.href);
+        return safe ? (
+          <a key={i} href={t.href} target="_blank" rel="noopener noreferrer">
+            <img src={t.href} alt={t.text} className="max-w-full max-h-48 rounded-lg my-1.5 inline-block" loading="lazy" />
+          </a>
+        ) : <span key={i}>{t.text}</span>;
+      }
       case 'link': return <a key={i} href={t.href} target="_blank" rel="noopener noreferrer" className="underline">{t.text}</a>;
       default: return <Linkify key={i} text={t.text} />;
     }
@@ -326,6 +338,19 @@ function ChatMarkdown({ content }: { content: string }) {
 // ChatWidget component
 // ---------------------------------------------------------------------------
 
+// File type display config — add new non-image types here
+const FILE_TYPES: Record<string, { Icon: typeof IconFileTypePdf; label: string; color: string }> = {
+  'application/pdf': { Icon: IconFileTypePdf, label: 'PDF', color: 'text-red-500' },
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': { Icon: IconFileSpreadsheet, label: 'Excel', color: 'text-green-600' },
+};
+
+function getFileTypeInfo(dataUri: string) {
+  for (const [mime, info] of Object.entries(FILE_TYPES)) {
+    if (dataUri.startsWith(`data:${mime}`)) return info;
+  }
+  return null;
+}
+
 export default function ChatWidget() {
   const { chatOpen, setChatOpen, messages, chatLoading, sendMessage } = useActions();
   const [input, setInput] = useState('');
@@ -449,16 +474,17 @@ export default function ChatWidget() {
                     ? 'bg-primary text-primary-foreground rounded-br-md'
                     : 'bg-muted text-foreground rounded-bl-md'
                 }`}>
-                  {m.image && (
-                    m.image.startsWith('data:application/pdf') ? (
+                  {m.image && (() => {
+                    const ft = getFileTypeInfo(m.image);
+                    return ft ? (
                       <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-black/10">
-                        <IconFileTypePdf size={20} />
-                        <span className="text-xs font-medium">PDF</span>
+                        <ft.Icon size={20} />
+                        <span className="text-xs font-medium">{ft.label}</span>
                       </div>
                     ) : (
                       <img src={m.image} alt="" className="max-w-full max-h-32 rounded-lg mb-2" />
-                    )
-                  )}
+                    );
+                  })()}
                   {m.content === 'In Arbeit...' ? (
                     <span className="flex items-center gap-2 text-muted-foreground">
                       <IconLoader2 size={14} className="animate-spin" />
@@ -488,14 +514,17 @@ export default function ChatWidget() {
           {image && (
             <div className="px-4 py-2">
               <div className="relative inline-block">
-                {image.startsWith('data:application/pdf') ? (
-                  <div className="h-16 px-4 rounded-lg border border-border bg-muted flex items-center gap-2">
-                    <IconFileTypePdf size={24} className="text-red-500 shrink-0" />
-                    <span className="text-xs font-medium truncate max-w-[200px]">{fileName || 'PDF'}</span>
-                  </div>
-                ) : (
-                  <img src={image} alt="" className="h-16 rounded-lg border border-border" />
-                )}
+                {(() => {
+                  const ft = getFileTypeInfo(image);
+                  return ft ? (
+                    <div className="h-16 px-4 rounded-lg border border-border bg-muted flex items-center gap-2">
+                      <ft.Icon size={24} className={`${ft.color} shrink-0`} />
+                      <span className="text-xs font-medium truncate max-w-[200px]">{fileName || ft.label}</span>
+                    </div>
+                  ) : (
+                    <img src={image} alt="" className="h-16 rounded-lg border border-border" />
+                  );
+                })()}
                 <button
                   onClick={() => { setImage(null); setFileName(null); }}
                   className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center"
@@ -519,7 +548,7 @@ export default function ChatWidget() {
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/*,.pdf,application/pdf"
+                accept="image/*,.pdf,application/pdf,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 onChange={handleFile}
                 className="hidden"
               />

@@ -1,4 +1,5 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react';
+import * as Sentry from '@sentry/react';
 import { IconAlertTriangle, IconRefresh, IconTool, IconCheck } from '@tabler/icons-react';
 
 const APPGROUP_ID = '69c124b5f2c232cb08c71a8c';
@@ -29,8 +30,12 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(_error: Error, info: ErrorInfo) {
+  componentDidCatch(error: Error, info: ErrorInfo) {
     this.setState({ componentStack: info.componentStack ?? '' });
+    Sentry.captureException(error, {
+      contexts: { react: { componentStack: info.componentStack ?? '' } },
+      tags: { appgroup_id: APPGROUP_ID, source: 'error_boundary' },
+    });
   }
 
   handleRepair = async () => {

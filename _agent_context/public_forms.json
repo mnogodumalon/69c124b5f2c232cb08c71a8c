@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "forms": [
+    {
+      "entity": "scope_1_–_direkte_emissionen",
+      "app_id": "69c1246ff4e0dc2324ed9440",
+      "path": "/rest/apps/69c1246ff4e0dc2324ed9440/records",
+      "allowed_fields": [
+        "s1_unterkategorie",
+        "s1_verbrauchsmenge",
+        "s1_einheit_verbrauch",
+        "s1_co2e_menge",
+        "s1_datenqualitaet",
+        "s1_bemerkungen"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Scope 1 – Direkte Emissionen — Formular"
+    },
+    {
+      "entity": "scope_2_–_indirekte_energieemissionen",
+      "app_id": "69c12470c2204e2aa999bcb8",
+      "path": "/rest/apps/69c12470c2204e2aa999bcb8/records",
+      "allowed_fields": [
+        "s2_energieart",
+        "s2_berechnungsmethode",
+        "s2_verbrauch_kwh",
+        "s2_co2e_marktbasiert",
+        "s2_co2e_standortbasiert",
+        "s2_lieferant",
+        "s2_herkunftsnachweis",
+        "s2_bemerkungen"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Scope 2 – Indirekte Energieemissionen — Formular"
+    },
+    {
+      "entity": "emissionen_schnelleingabe",
+      "app_id": "69c124726ff6d54a56c2e81c",
+      "path": "/rest/apps/69c124726ff6d54a56c2e81c/records",
+      "allowed_fields": [
+        "se_scope",
+        "se_unterkategorie",
+        "se_aktivitaet",
+        "se_aktivitaetsmenge",
+        "se_einheit_menge",
+        "se_co2e_menge",
+        "se_datenqualitaet",
+        "se_bemerkungen"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Emissionen Schnelleingabe — Formular"
+    },
+    {
+      "entity": "ghg_berichtsuebersicht",
+      "app_id": "69c124734278d3e6be1ca7c2",
+      "path": "/rest/apps/69c124734278d3e6be1ca7c2/records",
+      "allowed_fields": [
+        "gb_scope1_gesamt",
+        "gb_scope2_marktbasiert",
+        "gb_scope2_standortbasiert",
+        "gb_scope3_gesamt",
+        "gb_gesamt_co2e",
+        "gb_intensitaet_umsatz",
+        "gb_intensitaet_mitarbeiter",
+        "gb_basisjahr_vergleich",
+        "gb_verifizierungsstatus",
+        "gb_pruefer_vorname",
+        "gb_pruefer_nachname",
+        "gb_pruefdatum",
+        "gb_kommentare"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "GHG-Berichtsübersicht — Formular"
+    },
+    {
+      "entity": "konzernstruktur",
+      "app_id": "69c124661ddc6ec52a6c2836",
+      "path": "/rest/apps/69c124661ddc6ec52a6c2836/records",
+      "allowed_fields": [
+        "einheit_name",
+        "einheit_typ",
+        "uebergeordnete_einheit",
+        "land",
+        "branche",
+        "konsolidierungsmethode",
+        "verantwortlich_vorname",
+        "verantwortlich_nachname",
+        "verantwortlich_email",
+        "anmerkungen_einheit"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Konzernstruktur — Formular"
+    },
+    {
+      "entity": "scope_3_–_weitere_indirekte_emissionen",
+      "app_id": "69c12471ef7da5f0b841a1a3",
+      "path": "/rest/apps/69c12471ef7da5f0b841a1a3/records",
+      "allowed_fields": [
+        "s3_kategorie",
+        "s3_aktivitaet",
+        "s3_berechnungsmethode",
+        "s3_aktivitaetsmenge",
+        "s3_einheit_aktivitaet",
+        "s3_co2e_menge",
+        "s3_datenqualitaet",
+        "s3_bemerkungen"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Scope 3 – Weitere indirekte Emissionen — Formular"
+    },
+    {
+      "entity": "emissionsfaktoren",
+      "app_id": "69c1246ebeed0889fed560e2",
+      "path": "/rest/apps/69c1246ebeed0889fed560e2/records",
+      "allowed_fields": [
+        "ef_bezeichnung",
+        "ef_scope",
+        "ef_kategorie",
+        "ef_energietraeger",
+        "ef_einheit",
+        "ef_faktor",
+        "ef_treibhausgas",
+        "ef_quelle",
+        "ef_gueltigkeitsjahr"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Emissionsfaktoren — Formular"
+    },
+    {
+      "entity": "berichtsjahr",
+      "app_id": "69c1246d7299804c440448fa",
+      "path": "/rest/apps/69c1246d7299804c440448fa/records",
+      "allowed_fields": [
+        "jahr",
+        "startdatum",
+        "enddatum",
+        "ist_basisjahr",
+        "status_jahr",
+        "anmerkungen_jahr"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Berichtsjahr — Formular"
+    }
+  ]
+}

@@ -50,7 +50,6 @@ The following files are **pre-generated** and provide a complete React Router ap
 - `src/lib/enrich.ts` — `enrichX()` functions to resolve applookup fields to display names
 - `src/lib/formatters.ts` — `formatDate()`, `formatCurrency()`, `displayLookup()`, `displayMultiLookup()`, `lookupKey()`, `lookupKeys()` (locale-aware)
 - `src/lib/ai.ts` — AI utilities: `chatCompletion`, `classify`, `extract`, `summarize`, `translate`, `analyzeImage`, `extractFromPhoto`, `fileToDataUri`
-- `src/lib/chat-context.ts` — App-specific AI assistant system prompt
 - `src/components/ChatWidget.tsx` — Floating AI chat assistant (included in Layout)
 - `src/config/ai-features.ts` — AI photo scan toggles per entity (**you can edit this!**)
 - `src/pages/{Entity}Page.tsx` — Full CRUD pages per entity (table, search, create/edit/delete)
@@ -73,15 +72,22 @@ The CRUD pages provide basic list-based CRUD as a fallback. **Your job is to bui
 - **Reuse pre-generated dialogs in DashboardOverview** — When the dashboard needs create/edit dialogs, ALWAYS import and reuse the pre-generated `{Entity}Dialog` from `@/components/dialogs/{Entity}Dialog`. Do NOT build custom dialog forms — they lack photo scan, validation, and all field types. Example: `import { KurseDialog } from '@/components/dialogs/KurseDialog';`
 - **index.css** — NEVER touch. Pre-generated design system (font, colors, sidebar theme). Use existing tokens.
 - **Layout.tsx** — APP_TITLE is pre-set to the appgroup name. Only Edit if you need a different title.
-- **useDashboardData.ts, enriched.ts, enrich.ts, formatters.ts, ai.ts, chat-context.ts, ChatWidget.tsx** — NEVER touch. Use as-is.
+- **useDashboardData.ts, enriched.ts, enrich.ts, formatters.ts, ai.ts, ChatWidget.tsx, ErrorBus.tsx** — NEVER touch. Use as-is.
 - **`src/config/ai-features.ts`** — You MAY edit this file. Set `AI_PHOTO_SCAN['EntityName']` to `true` to enable the "Foto scannen" button in that entity's dialog. The button lets users photograph a document/receipt/card and auto-fill form fields via AI.
 - **CRUD pages and dialogs** — NEVER touch. Complete with all logic.
-- **App.tsx** — NEVER touch. Routes are pre-configured.
+- **App.tsx** — Routes are pre-configured. You MAY add custom imports/routes **only inside the `<custom:imports>` and `<custom:routes>` marker blocks** — content between markers is preserved across scaffold updates, everything else is overwritten. Example:
+  ```tsx
+  // <custom:imports>
+  import MyCustomPage from '@/pages/MyCustomPage';
+  // </custom:imports>
+  ...
+  {/* <custom:routes> */}
+  <Route path="custom" element={<MyCustomPage />} />
+  {/* </custom:routes> */}
+  ```
+  Never edit outside the markers — changes will be lost on the next scaffold update.
 - **PageShell.tsx, StatCard.tsx, ConfirmDialog.tsx** — NEVER touch.
 - **AdminPage.tsx, BulkEditDialog.tsx** — NEVER touch. Pre-generated admin panel with filters, multi-select, and bulk actions.
-- **`src/pages/public/PublicForm_*.tsx`** — You MAY edit these files. Public form pages (Verteilseiten) for users without a Living Apps account. You can customize layout, styling, field order, titles, and descriptions. Do NOT break the `submitPublicForm()`, `publicUploadFile()`, or `handleSubmit` functions — they proxy through the Klar backend.
-- **`src/config/public-forms.json`** — You MAY edit this file. Controls which fields appear on public forms, titles, descriptions, submit button text, and thank-you messages. Format: `{"forms": [{"entity": "...", "fields": [...], "title": "...", "thank_you": {"title": "...", "message": "..."}}]}`.
-- **`src/components/ShareFormLink.tsx`** — NEVER touch. Use as-is.
 
 ### Pre-Generated Component APIs (exact props — do NOT guess or Read to check)
 
@@ -133,29 +139,6 @@ defaultValues={opt ? { field_name: opt } : undefined}
 // ❌ WRONG
 <StatCard icon={IconBook} />
 ```
-
-**`ShareFormLink`** — share button for public form URLs (Verteilseiten). Place it wherever it makes contextual sense in the dashboard — e.g., on an order round card, next to an event, on a survey item. The component copies the public form URL to the clipboard.
-```tsx
-import { ShareFormLink } from '@/components/ShareFormLink';
-import { APP_IDS } from '@/types/app';
-
-// Button style (default) — "Link teilen" with icon
-<ShareFormLink appId={APP_IDS.BESTELLUNGEN} />
-
-// With custom label
-<ShareFormLink appId={APP_IDS.BESTELLUNGEN} label="Bestelllink teilen" />
-
-// Icon-only (compact, for tight spaces like table rows)
-<ShareFormLink appId={APP_IDS.BESTELLUNGEN} variant="icon" />
-
-// Inline text link
-<ShareFormLink appId={APP_IDS.BESTELLUNGEN} variant="inline" label="Link kopieren" />
-
-// With prefill — pre-populates fields in the public form
-<ShareFormLink appId={APP_IDS.BESTELLUNGEN} prefill={{ runde: rundeId, restaurant: name }} />
-```
-
-**IMPORTANT:** If public forms exist (`src/pages/public/` is not empty), you MUST integrate at least one `ShareFormLink` into DashboardOverview.tsx where it makes contextual sense. Think: "Where would the user naturally want to share a form link?" Place it there.
 
 **`ConfirmDialog`** — uses `onClose` (not `onCancel`):
 ```tsx
@@ -239,7 +222,6 @@ import { IconPlus, IconPencil, IconTrash, IconCalendar, IconClock, IconMapPin, I
 | `src/lib/enrich.ts` | `enrichX()` functions for applookup resolution |
 | `src/lib/formatters.ts` | `formatDate()`, `formatCurrency()`, `displayLookup()`, `displayMultiLookup()`, `lookupKey()`, `lookupKeys()` |
 | `src/lib/ai.ts` | AI helpers: `chatCompletion`, `classify`, `extract`, `summarize`, `translate`, `analyzeImage`, `extractFromPhoto`, `fileToDataUri` |
-| `src/lib/chat-context.ts` | App-specific system prompt for AI assistant |
 | `src/components/ChatWidget.tsx` | Floating AI chat assistant (in Layout) |
 | `src/config/ai-features.ts` | AI feature toggles — **editable** (photo scan per entity) |
 | `src/App.tsx` | React Router with all routes |
@@ -386,6 +368,10 @@ const file = e.target.files[0];
 const uri = await fileToDataUri(file);
 const fields = await extractFromPhoto(uri, '{"product": "string", "price": "number"}');
 ```
+
+## Public Landing Pages
+
+If the user asks for a landing page (*Landingpage*, *Verteilseite*, marketing page, public submission page — often with an attached mockup or Figma image), use the **`landing-pages`** skill. It covers the skeleton location, `_agent_context/public_forms.json`, the `<public:*>` App.tsx markers, and the `/#/public/p/<slug>` route convention.
 
 ## Build
 After completion: Run `npm run build` to create the production bundle. Deployment is handled automatically by the service.

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,12 +9,19 @@ import {
 } from '@/components/ui/select';
 import { lookupKey } from '@/lib/formatters';
 
-const KLAR_BASE = 'http://localhost:8000/claude';
+// Empty PROXY_BASE → relative URLs (dashboard and form-proxy share the domain).
+const PROXY_BASE = '';
+const APP_ID = '69c124734278d3e6be1ca7c2';
+const SUBMIT_PATH = `/rest/apps/${APP_ID}/records`;
+const ALTCHA_SCRIPT_SRC = 'https://cdn.jsdelivr.net/npm/altcha/dist/altcha.min.js';
 
-async function submitPublicForm(fields: Record<string, unknown>) {
-  const res = await fetch(`${KLAR_BASE}/public/69c124b5f2c232cb08c71a8c/69c124734278d3e6be1ca7c2/submit`, {
+async function submitPublicForm(fields: Record<string, unknown>, captchaToken: string) {
+  const res = await fetch(`${PROXY_BASE}/api${SUBMIT_PATH}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Captcha-Token': captchaToken,
+    },
     body: JSON.stringify({ fields }),
   });
   if (!res.ok) {
@@ -47,6 +54,16 @@ export default function PublicFormGhgBerichtsuebersicht() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const captchaRef = useRef<HTMLElement | null>(null);
+
+  // Load the ALTCHA web component script once per page.
+  useEffect(() => {
+    if (document.querySelector(`script[src="${ALTCHA_SCRIPT_SRC}"]`)) return;
+    const s = document.createElement('script');
+    s.src = ALTCHA_SCRIPT_SRC;
+    s.defer = true;
+    document.head.appendChild(s);
+  }, []);
 
   useEffect(() => {
     const hash = window.location.hash;
@@ -58,12 +75,23 @@ export default function PublicFormGhgBerichtsuebersicht() {
     if (Object.keys(prefill).length) setFields(prev => ({ ...prefill, ...prev }));
   }, []);
 
+  function readCaptchaToken(): string | null {
+    const el = captchaRef.current as any;
+    if (!el) return null;
+    return el.value || el.getAttribute('value') || null;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const token = readCaptchaToken();
+    if (!token) {
+      setError('Bitte warte auf die Spam-Prüfung und versuche es erneut.');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      await submitPublicForm(cleanFields(fields));
+      await submitPublicForm(cleanFields(fields), token);
       setSubmitted(true);
     } catch (err: any) {
       setError(err.message || 'Etwas ist schiefgelaufen. Bitte versuche es erneut.');
@@ -220,6 +248,13 @@ export default function PublicFormGhgBerichtsuebersicht() {
               rows={3}
             />
           </div>
+
+          <altcha-widget
+            ref={captchaRef as any}
+            challengeurl={`${PROXY_BASE}/api/_challenge?path=${encodeURIComponent(SUBMIT_PATH)}`}
+            auto="onsubmit"
+            hidefooter
+          />
 
           {error && (
             <div className="text-sm text-destructive bg-destructive/10 rounded-lg p-3">
