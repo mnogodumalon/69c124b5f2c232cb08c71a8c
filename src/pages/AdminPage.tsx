@@ -1,7 +1,13 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useDashboardData } from '@/hooks/useDashboardData';
-import type { Scope1DirekteEmissionen, Scope2IndirekteEnergieemissionen, EmissionenSchnelleingabe, GhgBerichtsuebersicht, Konzernstruktur, Scope3WeitereIndirekteEmissionen, Emissionsfaktoren, Berichtsjahr } from '@/types/app';
+import type { Scope3WeitereIndirekteEmissionen, Emissionsfaktoren, Berichtsjahr, Scope1DirekteEmissionen, Scope2IndirekteEnergieemissionen, EmissionenSchnelleingabe, GhgBerichtsuebersicht, Konzernstruktur } from '@/types/app';
 import { LivingAppsService, extractRecordId, cleanFieldsForApi } from '@/services/livingAppsService';
+import { Scope3WeitereIndirekteEmissionenDialog } from '@/components/dialogs/Scope3WeitereIndirekteEmissionenDialog';
+import { Scope3WeitereIndirekteEmissionenViewDialog } from '@/components/dialogs/Scope3WeitereIndirekteEmissionenViewDialog';
+import { EmissionsfaktorenDialog } from '@/components/dialogs/EmissionsfaktorenDialog';
+import { EmissionsfaktorenViewDialog } from '@/components/dialogs/EmissionsfaktorenViewDialog';
+import { BerichtsjahrDialog } from '@/components/dialogs/BerichtsjahrDialog';
+import { BerichtsjahrViewDialog } from '@/components/dialogs/BerichtsjahrViewDialog';
 import { Scope1DirekteEmissionenDialog } from '@/components/dialogs/Scope1DirekteEmissionenDialog';
 import { Scope1DirekteEmissionenViewDialog } from '@/components/dialogs/Scope1DirekteEmissionenViewDialog';
 import { Scope2IndirekteEnergieemissionenDialog } from '@/components/dialogs/Scope2IndirekteEnergieemissionenDialog';
@@ -12,12 +18,6 @@ import { GhgBerichtsuebersichtDialog } from '@/components/dialogs/GhgBerichtsueb
 import { GhgBerichtsuebersichtViewDialog } from '@/components/dialogs/GhgBerichtsuebersichtViewDialog';
 import { KonzernstrukturDialog } from '@/components/dialogs/KonzernstrukturDialog';
 import { KonzernstrukturViewDialog } from '@/components/dialogs/KonzernstrukturViewDialog';
-import { Scope3WeitereIndirekteEmissionenDialog } from '@/components/dialogs/Scope3WeitereIndirekteEmissionenDialog';
-import { Scope3WeitereIndirekteEmissionenViewDialog } from '@/components/dialogs/Scope3WeitereIndirekteEmissionenViewDialog';
-import { EmissionsfaktorenDialog } from '@/components/dialogs/EmissionsfaktorenDialog';
-import { EmissionsfaktorenViewDialog } from '@/components/dialogs/EmissionsfaktorenViewDialog';
-import { BerichtsjahrDialog } from '@/components/dialogs/BerichtsjahrDialog';
-import { BerichtsjahrViewDialog } from '@/components/dialogs/BerichtsjahrViewDialog';
 import { BulkEditDialog } from '@/components/dialogs/BulkEditDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageShell } from '@/components/PageShell';
@@ -44,6 +44,39 @@ function fmtDate(d?: string) {
 }
 
 // Field metadata per entity for bulk edit and column filters
+const SCOPE3WEITEREINDIREKTEEMISSIONEN_FIELDS = [
+  { key: 's3_einheit', label: 'Organisationseinheit', type: 'applookup/select', targetEntity: 'konzernstruktur', targetAppId: 'KONZERNSTRUKTUR', displayField: 'einheit_name' },
+  { key: 's3_berichtsjahr', label: 'Berichtsjahr', type: 'applookup/select', targetEntity: 'berichtsjahr', targetAppId: 'BERICHTSJAHR', displayField: 'anmerkungen_jahr' },
+  { key: 's3_kategorie', label: 'Scope-3-Kategorie', type: 'lookup/select', options: [{ key: 'kat1', label: 'Kat. 1: Eingekaufte Waren und Dienstleistungen' }, { key: 'kat2', label: 'Kat. 2: Investitionsgüter' }, { key: 'kat3', label: 'Kat. 3: Brennstoff- und energiebezogene Aktivitäten' }, { key: 'kat4', label: 'Kat. 4: Vorgelagerter Transport und Vertrieb' }, { key: 'kat5', label: 'Kat. 5: Abfälle aus dem Betrieb' }, { key: 'kat6', label: 'Kat. 6: Geschäftsreisen' }, { key: 'kat7', label: 'Kat. 7: Pendlerverkehr der Mitarbeitenden' }, { key: 'kat8', label: 'Kat. 8: Vorgelagerte gemietete Anlagen' }, { key: 'kat9', label: 'Kat. 9: Nachgelagerter Transport und Vertrieb' }, { key: 'kat10', label: 'Kat. 10: Verarbeitung verkaufter Produkte' }, { key: 'kat11', label: 'Kat. 11: Nutzung verkaufter Produkte' }, { key: 'kat12', label: 'Kat. 12: Entsorgung verkaufter Produkte' }, { key: 'kat13', label: 'Kat. 13: Nachgelagerte gemietete Anlagen' }, { key: 'kat14', label: 'Kat. 14: Franchises' }, { key: 'kat15', label: 'Kat. 15: Investitionen' }] },
+  { key: 's3_aktivitaet', label: 'Aktivitätsbeschreibung', type: 'string/textarea' },
+  { key: 's3_berechnungsmethode', label: 'Berechnungsmethode', type: 'lookup/radio', options: [{ key: 'ausgabenbasiert', label: 'Ausgabenbasiert' }, { key: 'aktivitaetsbasiert', label: 'Aktivitätsbasiert' }, { key: 'hybrid', label: 'Hybridmethode' }, { key: 'lieferantenspezifisch', label: 'Lieferantenspezifisch' }] },
+  { key: 's3_aktivitaetsmenge', label: 'Aktivitätsmenge', type: 'number' },
+  { key: 's3_einheit_aktivitaet', label: 'Einheit der Aktivitätsmenge', type: 'lookup/select', options: [{ key: 'kwh', label: 'kWh' }, { key: 'mwh', label: 'MWh' }, { key: 'liter', label: 'Liter' }, { key: 'kg', label: 'kg' }, { key: 'tonne', label: 'Tonne' }, { key: 'tkm', label: 'tkm' }, { key: 'pkm', label: 'Personenkilometer' }, { key: 'eur', label: 'EUR' }, { key: 'm3', label: 'm³' }, { key: 'sonstige', label: 'Sonstige' }] },
+  { key: 's3_emissionsfaktor', label: 'Emissionsfaktor', type: 'applookup/select', targetEntity: 'emissionsfaktoren', targetAppId: 'EMISSIONSFAKTOREN', displayField: 'ef_bezeichnung' },
+  { key: 's3_co2e_menge', label: 'Berechnete CO2e-Menge (Tonnen)', type: 'number' },
+  { key: 's3_datenqualitaet', label: 'Datenqualität', type: 'lookup/radio', options: [{ key: 'primaer', label: 'Primärdaten' }, { key: 'sekundaer', label: 'Sekundärdaten' }, { key: 'schaetzung', label: 'Schätzung' }] },
+  { key: 's3_bemerkungen', label: 'Bemerkungen', type: 'string/textarea' },
+  { key: 's3_nachweis', label: 'Nachweis / Beleg (Datei-Upload)', type: 'file' },
+];
+const EMISSIONSFAKTOREN_FIELDS = [
+  { key: 'ef_bezeichnung', label: 'Bezeichnung', type: 'string/text' },
+  { key: 'ef_scope', label: 'Scope-Zuordnung', type: 'lookup/radio', options: [{ key: 'scope1', label: 'Scope 1' }, { key: 'scope2', label: 'Scope 2' }, { key: 'scope3', label: 'Scope 3' }] },
+  { key: 'ef_kategorie', label: 'Kategorie', type: 'lookup/select', options: [{ key: 'stationaere_verbrennung', label: 'Stationäre Verbrennung' }, { key: 'mobile_verbrennung', label: 'Mobile Verbrennung' }, { key: 'prozessemissionen', label: 'Prozessemissionen' }, { key: 'fluechtige_emissionen', label: 'Flüchtige Emissionen' }, { key: 'strom', label: 'Eingekaufter Strom' }, { key: 'waerme', label: 'Eingekaufte Wärme' }, { key: 'kaelte', label: 'Eingekaufte Kälte' }, { key: 'dampf', label: 'Eingekaufter Dampf' }, { key: 'vorgelagert', label: 'Vorgelagerte Emissionen' }, { key: 'nachgelagert', label: 'Nachgelagerte Emissionen' }, { key: 'sonstige', label: 'Sonstige' }] },
+  { key: 'ef_energietraeger', label: 'Energieträger / Aktivität', type: 'string/text' },
+  { key: 'ef_einheit', label: 'Einheit', type: 'lookup/select', options: [{ key: 'kwh', label: 'kWh' }, { key: 'mwh', label: 'MWh' }, { key: 'gj', label: 'GJ' }, { key: 'liter', label: 'Liter' }, { key: 'kg', label: 'kg' }, { key: 'tonne', label: 'Tonne' }, { key: 'm3', label: 'm³' }, { key: 'tkm', label: 'tkm' }, { key: 'pkm', label: 'Personenkilometer' }, { key: 'eur', label: 'EUR' }, { key: 'sonstige', label: 'Sonstige' }] },
+  { key: 'ef_faktor', label: 'Emissionsfaktor (kg CO2e pro Einheit)', type: 'number' },
+  { key: 'ef_treibhausgas', label: 'Treibhausgase', type: 'multiplelookup/checkbox', options: [{ key: 'co2', label: 'CO2' }, { key: 'ch4', label: 'CH4' }, { key: 'n2o', label: 'N2O' }, { key: 'hfc', label: 'HFC' }, { key: 'pfc', label: 'PFC' }, { key: 'sf6', label: 'SF6' }, { key: 'nf3', label: 'NF3' }] },
+  { key: 'ef_quelle', label: 'Quelle / Referenz', type: 'string/text' },
+  { key: 'ef_gueltigkeitsjahr', label: 'Gültigkeitsjahr', type: 'number' },
+];
+const BERICHTSJAHR_FIELDS = [
+  { key: 'jahr', label: 'Berichtsjahr', type: 'number' },
+  { key: 'startdatum', label: 'Startdatum', type: 'date/date' },
+  { key: 'enddatum', label: 'Enddatum', type: 'date/date' },
+  { key: 'ist_basisjahr', label: 'Ist Basisjahr', type: 'bool' },
+  { key: 'status_jahr', label: 'Status', type: 'lookup/radio', options: [{ key: 'offen', label: 'Offen' }, { key: 'geschlossen', label: 'Geschlossen' }, { key: 'archiviert', label: 'Archiviert' }] },
+  { key: 'anmerkungen_jahr', label: 'Anmerkungen zum Berichtsjahr', type: 'string/textarea' },
+];
 const SCOPE1DIREKTEEMISSIONEN_FIELDS = [
   { key: 's1_einheit', label: 'Organisationseinheit', type: 'applookup/select', targetEntity: 'konzernstruktur', targetAppId: 'KONZERNSTRUKTUR', displayField: 'einheit_name' },
   { key: 's1_berichtsjahr', label: 'Berichtsjahr', type: 'applookup/select', targetEntity: 'berichtsjahr', targetAppId: 'BERICHTSJAHR', displayField: 'anmerkungen_jahr' },
@@ -57,7 +90,6 @@ const SCOPE1DIREKTEEMISSIONEN_FIELDS = [
   { key: 's1_nachweis', label: 'Nachweis / Beleg (Datei-Upload)', type: 'file' },
 ];
 const SCOPE2INDIREKTEENERGIEEMISSIONEN_FIELDS = [
-  { key: 's2_einheit', label: 'Organisationseinheit', type: 'applookup/select', targetEntity: 'konzernstruktur', targetAppId: 'KONZERNSTRUKTUR', displayField: 'einheit_name' },
   { key: 's2_berichtsjahr', label: 'Berichtsjahr', type: 'applookup/select', targetEntity: 'berichtsjahr', targetAppId: 'BERICHTSJAHR', displayField: 'anmerkungen_jahr' },
   { key: 's2_energieart', label: 'Energieart', type: 'lookup/select', options: [{ key: 'strom', label: 'Strom' }, { key: 'fernwaerme', label: 'Fernwärme' }, { key: 'fernkaelte', label: 'Fernkälte' }, { key: 'dampf', label: 'Dampf' }] },
   { key: 's2_berechnungsmethode', label: 'Berechnungsmethode', type: 'lookup/radio', options: [{ key: 'marktbasiert', label: 'Marktbasiert' }, { key: 'standortbasiert', label: 'Standortbasiert' }, { key: 'beide', label: 'Beide' }] },
@@ -69,6 +101,7 @@ const SCOPE2INDIREKTEENERGIEEMISSIONEN_FIELDS = [
   { key: 's2_herkunftsnachweis', label: 'Herkunftsnachweis vorhanden (z. B. Grünstromzertifikat)', type: 'bool' },
   { key: 's2_bemerkungen', label: 'Bemerkungen', type: 'string/textarea' },
   { key: 's2_nachweis', label: 'Nachweis / Beleg (Datei-Upload)', type: 'file' },
+  { key: 's2_einheit', label: 'Organisationseinheit', type: 'applookup/select', targetEntity: 'konzernstruktur', targetAppId: 'KONZERNSTRUKTUR', displayField: 'einheit_name' },
 ];
 const EMISSIONENSCHNELLEINGABE_FIELDS = [
   { key: 'se_einheit', label: 'Organisationseinheit', type: 'applookup/select', targetEntity: 'konzernstruktur', targetAppId: 'KONZERNSTRUKTUR', displayField: 'einheit_name' },
@@ -113,49 +146,16 @@ const KONZERNSTRUKTUR_FIELDS = [
   { key: 'verantwortlich_email', label: 'E-Mail der verantwortlichen Person', type: 'string/email' },
   { key: 'anmerkungen_einheit', label: 'Anmerkungen', type: 'string/textarea' },
 ];
-const SCOPE3WEITEREINDIREKTEEMISSIONEN_FIELDS = [
-  { key: 's3_einheit', label: 'Organisationseinheit', type: 'applookup/select', targetEntity: 'konzernstruktur', targetAppId: 'KONZERNSTRUKTUR', displayField: 'einheit_name' },
-  { key: 's3_berichtsjahr', label: 'Berichtsjahr', type: 'applookup/select', targetEntity: 'berichtsjahr', targetAppId: 'BERICHTSJAHR', displayField: 'anmerkungen_jahr' },
-  { key: 's3_kategorie', label: 'Scope-3-Kategorie', type: 'lookup/select', options: [{ key: 'kat1', label: 'Kat. 1: Eingekaufte Waren und Dienstleistungen' }, { key: 'kat2', label: 'Kat. 2: Investitionsgüter' }, { key: 'kat3', label: 'Kat. 3: Brennstoff- und energiebezogene Aktivitäten' }, { key: 'kat4', label: 'Kat. 4: Vorgelagerter Transport und Vertrieb' }, { key: 'kat5', label: 'Kat. 5: Abfälle aus dem Betrieb' }, { key: 'kat6', label: 'Kat. 6: Geschäftsreisen' }, { key: 'kat7', label: 'Kat. 7: Pendlerverkehr der Mitarbeitenden' }, { key: 'kat8', label: 'Kat. 8: Vorgelagerte gemietete Anlagen' }, { key: 'kat9', label: 'Kat. 9: Nachgelagerter Transport und Vertrieb' }, { key: 'kat10', label: 'Kat. 10: Verarbeitung verkaufter Produkte' }, { key: 'kat11', label: 'Kat. 11: Nutzung verkaufter Produkte' }, { key: 'kat12', label: 'Kat. 12: Entsorgung verkaufter Produkte' }, { key: 'kat13', label: 'Kat. 13: Nachgelagerte gemietete Anlagen' }, { key: 'kat14', label: 'Kat. 14: Franchises' }, { key: 'kat15', label: 'Kat. 15: Investitionen' }] },
-  { key: 's3_aktivitaet', label: 'Aktivitätsbeschreibung', type: 'string/textarea' },
-  { key: 's3_berechnungsmethode', label: 'Berechnungsmethode', type: 'lookup/radio', options: [{ key: 'ausgabenbasiert', label: 'Ausgabenbasiert' }, { key: 'aktivitaetsbasiert', label: 'Aktivitätsbasiert' }, { key: 'hybrid', label: 'Hybridmethode' }, { key: 'lieferantenspezifisch', label: 'Lieferantenspezifisch' }] },
-  { key: 's3_aktivitaetsmenge', label: 'Aktivitätsmenge', type: 'number' },
-  { key: 's3_einheit_aktivitaet', label: 'Einheit der Aktivitätsmenge', type: 'lookup/select', options: [{ key: 'kwh', label: 'kWh' }, { key: 'mwh', label: 'MWh' }, { key: 'liter', label: 'Liter' }, { key: 'kg', label: 'kg' }, { key: 'tonne', label: 'Tonne' }, { key: 'tkm', label: 'tkm' }, { key: 'pkm', label: 'Personenkilometer' }, { key: 'eur', label: 'EUR' }, { key: 'm3', label: 'm³' }, { key: 'sonstige', label: 'Sonstige' }] },
-  { key: 's3_emissionsfaktor', label: 'Emissionsfaktor', type: 'applookup/select', targetEntity: 'emissionsfaktoren', targetAppId: 'EMISSIONSFAKTOREN', displayField: 'ef_bezeichnung' },
-  { key: 's3_co2e_menge', label: 'Berechnete CO2e-Menge (Tonnen)', type: 'number' },
-  { key: 's3_datenqualitaet', label: 'Datenqualität', type: 'lookup/radio', options: [{ key: 'primaer', label: 'Primärdaten' }, { key: 'sekundaer', label: 'Sekundärdaten' }, { key: 'schaetzung', label: 'Schätzung' }] },
-  { key: 's3_bemerkungen', label: 'Bemerkungen', type: 'string/textarea' },
-  { key: 's3_nachweis', label: 'Nachweis / Beleg (Datei-Upload)', type: 'file' },
-];
-const EMISSIONSFAKTOREN_FIELDS = [
-  { key: 'ef_bezeichnung', label: 'Bezeichnung', type: 'string/text' },
-  { key: 'ef_scope', label: 'Scope-Zuordnung', type: 'lookup/radio', options: [{ key: 'scope1', label: 'Scope 1' }, { key: 'scope2', label: 'Scope 2' }, { key: 'scope3', label: 'Scope 3' }] },
-  { key: 'ef_kategorie', label: 'Kategorie', type: 'lookup/select', options: [{ key: 'stationaere_verbrennung', label: 'Stationäre Verbrennung' }, { key: 'mobile_verbrennung', label: 'Mobile Verbrennung' }, { key: 'prozessemissionen', label: 'Prozessemissionen' }, { key: 'fluechtige_emissionen', label: 'Flüchtige Emissionen' }, { key: 'strom', label: 'Eingekaufter Strom' }, { key: 'waerme', label: 'Eingekaufte Wärme' }, { key: 'kaelte', label: 'Eingekaufte Kälte' }, { key: 'dampf', label: 'Eingekaufter Dampf' }, { key: 'vorgelagert', label: 'Vorgelagerte Emissionen' }, { key: 'nachgelagert', label: 'Nachgelagerte Emissionen' }, { key: 'sonstige', label: 'Sonstige' }] },
-  { key: 'ef_energietraeger', label: 'Energieträger / Aktivität', type: 'string/text' },
-  { key: 'ef_einheit', label: 'Einheit', type: 'lookup/select', options: [{ key: 'kwh', label: 'kWh' }, { key: 'mwh', label: 'MWh' }, { key: 'gj', label: 'GJ' }, { key: 'liter', label: 'Liter' }, { key: 'kg', label: 'kg' }, { key: 'tonne', label: 'Tonne' }, { key: 'm3', label: 'm³' }, { key: 'tkm', label: 'tkm' }, { key: 'pkm', label: 'Personenkilometer' }, { key: 'eur', label: 'EUR' }, { key: 'sonstige', label: 'Sonstige' }] },
-  { key: 'ef_faktor', label: 'Emissionsfaktor (kg CO2e pro Einheit)', type: 'number' },
-  { key: 'ef_treibhausgas', label: 'Treibhausgase', type: 'multiplelookup/checkbox', options: [{ key: 'co2', label: 'CO2' }, { key: 'ch4', label: 'CH4' }, { key: 'n2o', label: 'N2O' }, { key: 'hfc', label: 'HFC' }, { key: 'pfc', label: 'PFC' }, { key: 'sf6', label: 'SF6' }, { key: 'nf3', label: 'NF3' }] },
-  { key: 'ef_quelle', label: 'Quelle / Referenz', type: 'string/text' },
-  { key: 'ef_gueltigkeitsjahr', label: 'Gültigkeitsjahr', type: 'number' },
-];
-const BERICHTSJAHR_FIELDS = [
-  { key: 'jahr', label: 'Berichtsjahr', type: 'number' },
-  { key: 'startdatum', label: 'Startdatum', type: 'date/date' },
-  { key: 'enddatum', label: 'Enddatum', type: 'date/date' },
-  { key: 'ist_basisjahr', label: 'Ist Basisjahr', type: 'bool' },
-  { key: 'status_jahr', label: 'Status', type: 'lookup/radio', options: [{ key: 'geschlossen', label: 'Geschlossen' }, { key: 'archiviert', label: 'Archiviert' }, { key: 'offen', label: 'Offen' }] },
-  { key: 'anmerkungen_jahr', label: 'Anmerkungen zum Berichtsjahr', type: 'string/textarea' },
-];
 
 const ENTITY_TABS = [
+  { key: 'scope_3_–_weitere_indirekte_emissionen', label: 'Scope 3 – Weitere indirekte Emissionen', pascal: 'Scope3WeitereIndirekteEmissionen' },
+  { key: 'emissionsfaktoren', label: 'Emissionsfaktoren', pascal: 'Emissionsfaktoren' },
+  { key: 'berichtsjahr', label: 'Berichtsjahr', pascal: 'Berichtsjahr' },
   { key: 'scope_1_–_direkte_emissionen', label: 'Scope 1 – Direkte Emissionen', pascal: 'Scope1DirekteEmissionen' },
   { key: 'scope_2_–_indirekte_energieemissionen', label: 'Scope 2 – Indirekte Energieemissionen', pascal: 'Scope2IndirekteEnergieemissionen' },
   { key: 'emissionen_schnelleingabe', label: 'Emissionen Schnelleingabe', pascal: 'EmissionenSchnelleingabe' },
   { key: 'ghg_berichtsuebersicht', label: 'GHG-Berichtsübersicht', pascal: 'GhgBerichtsuebersicht' },
   { key: 'konzernstruktur', label: 'Konzernstruktur', pascal: 'Konzernstruktur' },
-  { key: 'scope_3_–_weitere_indirekte_emissionen', label: 'Scope 3 – Weitere indirekte Emissionen', pascal: 'Scope3WeitereIndirekteEmissionen' },
-  { key: 'emissionsfaktoren', label: 'Emissionsfaktoren', pascal: 'Emissionsfaktoren' },
-  { key: 'berichtsjahr', label: 'Berichtsjahr', pascal: 'Berichtsjahr' },
 ] as const;
 
 type EntityKey = typeof ENTITY_TABS[number]['key'];
@@ -164,26 +164,26 @@ export default function AdminPage() {
   const data = useDashboardData();
   const { loading, error, fetchAll } = data;
 
-  const [activeTab, setActiveTab] = useState<EntityKey>('scope_1_–_direkte_emissionen');
+  const [activeTab, setActiveTab] = useState<EntityKey>('scope_3_–_weitere_indirekte_emissionen');
   const [selectedIds, setSelectedIds] = useState<Record<EntityKey, Set<string>>>(() => ({
+    'scope_3_–_weitere_indirekte_emissionen': new Set(),
+    'emissionsfaktoren': new Set(),
+    'berichtsjahr': new Set(),
     'scope_1_–_direkte_emissionen': new Set(),
     'scope_2_–_indirekte_energieemissionen': new Set(),
     'emissionen_schnelleingabe': new Set(),
     'ghg_berichtsuebersicht': new Set(),
     'konzernstruktur': new Set(),
-    'scope_3_–_weitere_indirekte_emissionen': new Set(),
-    'emissionsfaktoren': new Set(),
-    'berichtsjahr': new Set(),
   }));
   const [filters, setFilters] = useState<Record<EntityKey, Record<string, string>>>(() => ({
+    'scope_3_–_weitere_indirekte_emissionen': {},
+    'emissionsfaktoren': {},
+    'berichtsjahr': {},
     'scope_1_–_direkte_emissionen': {},
     'scope_2_–_indirekte_energieemissionen': {},
     'emissionen_schnelleingabe': {},
     'ghg_berichtsuebersicht': {},
     'konzernstruktur': {},
-    'scope_3_–_weitere_indirekte_emissionen': {},
-    'emissionsfaktoren': {},
-    'berichtsjahr': {},
   }));
   const [showFilters, setShowFilters] = useState(false);
   const [dialogState, setDialogState] = useState<{ entity: EntityKey; record: any } | null>(null);
@@ -198,14 +198,14 @@ export default function AdminPage() {
 
   const getRecords = useCallback((entity: EntityKey) => {
     switch (entity) {
+      case 'scope_3_–_weitere_indirekte_emissionen': return (data as any).scope3WeitereIndirekteEmissionen as Scope3WeitereIndirekteEmissionen[] ?? [];
+      case 'emissionsfaktoren': return (data as any).emissionsfaktoren as Emissionsfaktoren[] ?? [];
+      case 'berichtsjahr': return (data as any).berichtsjahr as Berichtsjahr[] ?? [];
       case 'scope_1_–_direkte_emissionen': return (data as any).scope1DirekteEmissionen as Scope1DirekteEmissionen[] ?? [];
       case 'scope_2_–_indirekte_energieemissionen': return (data as any).scope2IndirekteEnergieemissionen as Scope2IndirekteEnergieemissionen[] ?? [];
       case 'emissionen_schnelleingabe': return (data as any).emissionenSchnelleingabe as EmissionenSchnelleingabe[] ?? [];
       case 'ghg_berichtsuebersicht': return (data as any).ghgBerichtsuebersicht as GhgBerichtsuebersicht[] ?? [];
       case 'konzernstruktur': return (data as any).konzernstruktur as Konzernstruktur[] ?? [];
-      case 'scope_3_–_weitere_indirekte_emissionen': return (data as any).scope3WeitereIndirekteEmissionen as Scope3WeitereIndirekteEmissionen[] ?? [];
-      case 'emissionsfaktoren': return (data as any).emissionsfaktoren as Emissionsfaktoren[] ?? [];
-      case 'berichtsjahr': return (data as any).berichtsjahr as Berichtsjahr[] ?? [];
       default: return [];
     }
   }, [data]);
@@ -213,15 +213,20 @@ export default function AdminPage() {
   const getLookupLists = useCallback((entity: EntityKey) => {
     const lists: Record<string, any[]> = {};
     switch (entity) {
+      case 'scope_3_–_weitere_indirekte_emissionen':
+        lists.konzernstrukturList = (data as any).konzernstruktur ?? [];
+        lists.berichtsjahrList = (data as any).berichtsjahr ?? [];
+        lists.emissionsfaktorenList = (data as any).emissionsfaktoren ?? [];
+        break;
       case 'scope_1_–_direkte_emissionen':
         lists.konzernstrukturList = (data as any).konzernstruktur ?? [];
         lists.berichtsjahrList = (data as any).berichtsjahr ?? [];
         lists.emissionsfaktorenList = (data as any).emissionsfaktoren ?? [];
         break;
       case 'scope_2_–_indirekte_energieemissionen':
-        lists.konzernstrukturList = (data as any).konzernstruktur ?? [];
         lists.berichtsjahrList = (data as any).berichtsjahr ?? [];
         lists.emissionsfaktorenList = (data as any).emissionsfaktoren ?? [];
+        lists.konzernstrukturList = (data as any).konzernstruktur ?? [];
         break;
       case 'emissionen_schnelleingabe':
         lists.konzernstrukturList = (data as any).konzernstruktur ?? [];
@@ -231,11 +236,6 @@ export default function AdminPage() {
       case 'ghg_berichtsuebersicht':
         lists.berichtsjahrList = (data as any).berichtsjahr ?? [];
         lists.konzernstrukturList = (data as any).konzernstruktur ?? [];
-        break;
-      case 'scope_3_–_weitere_indirekte_emissionen':
-        lists.konzernstrukturList = (data as any).konzernstruktur ?? [];
-        lists.berichtsjahrList = (data as any).berichtsjahr ?? [];
-        lists.emissionsfaktorenList = (data as any).emissionsfaktoren ?? [];
         break;
     }
     return lists;
@@ -247,6 +247,18 @@ export default function AdminPage() {
     if (!id) return '—';
     const lists = getLookupLists(entity);
     void fieldKey; // ensure used for noUnusedParameters
+    if (entity === 'scope_3_–_weitere_indirekte_emissionen' && fieldKey === 's3_einheit') {
+      const match = (lists.konzernstrukturList ?? []).find((r: any) => r.record_id === id);
+      return match?.fields.einheit_name ?? '—';
+    }
+    if (entity === 'scope_3_–_weitere_indirekte_emissionen' && fieldKey === 's3_berichtsjahr') {
+      const match = (lists.berichtsjahrList ?? []).find((r: any) => r.record_id === id);
+      return match?.fields.anmerkungen_jahr ?? '—';
+    }
+    if (entity === 'scope_3_–_weitere_indirekte_emissionen' && fieldKey === 's3_emissionsfaktor') {
+      const match = (lists.emissionsfaktorenList ?? []).find((r: any) => r.record_id === id);
+      return match?.fields.ef_bezeichnung ?? '—';
+    }
     if (entity === 'scope_1_–_direkte_emissionen' && fieldKey === 's1_einheit') {
       const match = (lists.konzernstrukturList ?? []).find((r: any) => r.record_id === id);
       return match?.fields.einheit_name ?? '—';
@@ -259,10 +271,6 @@ export default function AdminPage() {
       const match = (lists.emissionsfaktorenList ?? []).find((r: any) => r.record_id === id);
       return match?.fields.ef_bezeichnung ?? '—';
     }
-    if (entity === 'scope_2_–_indirekte_energieemissionen' && fieldKey === 's2_einheit') {
-      const match = (lists.konzernstrukturList ?? []).find((r: any) => r.record_id === id);
-      return match?.fields.einheit_name ?? '—';
-    }
     if (entity === 'scope_2_–_indirekte_energieemissionen' && fieldKey === 's2_berichtsjahr') {
       const match = (lists.berichtsjahrList ?? []).find((r: any) => r.record_id === id);
       return match?.fields.anmerkungen_jahr ?? '—';
@@ -270,6 +278,10 @@ export default function AdminPage() {
     if (entity === 'scope_2_–_indirekte_energieemissionen' && fieldKey === 's2_emissionsfaktor') {
       const match = (lists.emissionsfaktorenList ?? []).find((r: any) => r.record_id === id);
       return match?.fields.ef_bezeichnung ?? '—';
+    }
+    if (entity === 'scope_2_–_indirekte_energieemissionen' && fieldKey === 's2_einheit') {
+      const match = (lists.konzernstrukturList ?? []).find((r: any) => r.record_id === id);
+      return match?.fields.einheit_name ?? '—';
     }
     if (entity === 'emissionen_schnelleingabe' && fieldKey === 'se_einheit') {
       const match = (lists.konzernstrukturList ?? []).find((r: any) => r.record_id === id);
@@ -291,31 +303,19 @@ export default function AdminPage() {
       const match = (lists.konzernstrukturList ?? []).find((r: any) => r.record_id === id);
       return match?.fields.einheit_name ?? '—';
     }
-    if (entity === 'scope_3_–_weitere_indirekte_emissionen' && fieldKey === 's3_einheit') {
-      const match = (lists.konzernstrukturList ?? []).find((r: any) => r.record_id === id);
-      return match?.fields.einheit_name ?? '—';
-    }
-    if (entity === 'scope_3_–_weitere_indirekte_emissionen' && fieldKey === 's3_berichtsjahr') {
-      const match = (lists.berichtsjahrList ?? []).find((r: any) => r.record_id === id);
-      return match?.fields.anmerkungen_jahr ?? '—';
-    }
-    if (entity === 'scope_3_–_weitere_indirekte_emissionen' && fieldKey === 's3_emissionsfaktor') {
-      const match = (lists.emissionsfaktorenList ?? []).find((r: any) => r.record_id === id);
-      return match?.fields.ef_bezeichnung ?? '—';
-    }
     return String(url);
   }, [getLookupLists]);
 
   const getFieldMeta = useCallback((entity: EntityKey) => {
     switch (entity) {
+      case 'scope_3_–_weitere_indirekte_emissionen': return SCOPE3WEITEREINDIREKTEEMISSIONEN_FIELDS;
+      case 'emissionsfaktoren': return EMISSIONSFAKTOREN_FIELDS;
+      case 'berichtsjahr': return BERICHTSJAHR_FIELDS;
       case 'scope_1_–_direkte_emissionen': return SCOPE1DIREKTEEMISSIONEN_FIELDS;
       case 'scope_2_–_indirekte_energieemissionen': return SCOPE2INDIREKTEENERGIEEMISSIONEN_FIELDS;
       case 'emissionen_schnelleingabe': return EMISSIONENSCHNELLEINGABE_FIELDS;
       case 'ghg_berichtsuebersicht': return GHGBERICHTSUEBERSICHT_FIELDS;
       case 'konzernstruktur': return KONZERNSTRUKTUR_FIELDS;
-      case 'scope_3_–_weitere_indirekte_emissionen': return SCOPE3WEITEREINDIREKTEEMISSIONEN_FIELDS;
-      case 'emissionsfaktoren': return EMISSIONSFAKTOREN_FIELDS;
-      case 'berichtsjahr': return BERICHTSJAHR_FIELDS;
       default: return [];
     }
   }, []);
@@ -410,6 +410,21 @@ export default function AdminPage() {
 
   const getServiceMethods = useCallback((entity: EntityKey) => {
     switch (entity) {
+      case 'scope_3_–_weitere_indirekte_emissionen': return {
+        create: (fields: any) => LivingAppsService.createScope3WeitereIndirekteEmissionenEntry(fields),
+        update: (id: string, fields: any) => LivingAppsService.updateScope3WeitereIndirekteEmissionenEntry(id, fields),
+        remove: (id: string) => LivingAppsService.deleteScope3WeitereIndirekteEmissionenEntry(id),
+      };
+      case 'emissionsfaktoren': return {
+        create: (fields: any) => LivingAppsService.createEmissionsfaktorenEntry(fields),
+        update: (id: string, fields: any) => LivingAppsService.updateEmissionsfaktorenEntry(id, fields),
+        remove: (id: string) => LivingAppsService.deleteEmissionsfaktorenEntry(id),
+      };
+      case 'berichtsjahr': return {
+        create: (fields: any) => LivingAppsService.createBerichtsjahrEntry(fields),
+        update: (id: string, fields: any) => LivingAppsService.updateBerichtsjahrEntry(id, fields),
+        remove: (id: string) => LivingAppsService.deleteBerichtsjahrEntry(id),
+      };
       case 'scope_1_–_direkte_emissionen': return {
         create: (fields: any) => LivingAppsService.createScope1DirekteEmissionenEntry(fields),
         update: (id: string, fields: any) => LivingAppsService.updateScope1DirekteEmissionenEntry(id, fields),
@@ -434,21 +449,6 @@ export default function AdminPage() {
         create: (fields: any) => LivingAppsService.createKonzernstrukturEntry(fields),
         update: (id: string, fields: any) => LivingAppsService.updateKonzernstrukturEntry(id, fields),
         remove: (id: string) => LivingAppsService.deleteKonzernstrukturEntry(id),
-      };
-      case 'scope_3_–_weitere_indirekte_emissionen': return {
-        create: (fields: any) => LivingAppsService.createScope3WeitereIndirekteEmissionenEntry(fields),
-        update: (id: string, fields: any) => LivingAppsService.updateScope3WeitereIndirekteEmissionenEntry(id, fields),
-        remove: (id: string) => LivingAppsService.deleteScope3WeitereIndirekteEmissionenEntry(id),
-      };
-      case 'emissionsfaktoren': return {
-        create: (fields: any) => LivingAppsService.createEmissionsfaktorenEntry(fields),
-        update: (id: string, fields: any) => LivingAppsService.updateEmissionsfaktorenEntry(id, fields),
-        remove: (id: string) => LivingAppsService.deleteEmissionsfaktorenEntry(id),
-      };
-      case 'berichtsjahr': return {
-        create: (fields: any) => LivingAppsService.createBerichtsjahrEntry(fields),
-        update: (id: string, fields: any) => LivingAppsService.updateBerichtsjahrEntry(id, fields),
-        remove: (id: string) => LivingAppsService.deleteBerichtsjahrEntry(id),
       };
       default: return null;
     }
@@ -720,10 +720,23 @@ export default function AdminPage() {
                   if (fm.type === 'lookup/select' || fm.type === 'lookup/radio') {
                     return <TableCell key={fm.key}><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{val?.label ?? '—'}</span></TableCell>;
                   }
-                  if (fm.type.includes('multiplelookup')) {
+                  if (fm.type.startsWith('multiplelookup')) {
                     return <TableCell key={fm.key}>{Array.isArray(val) ? val.map((v: any) => v?.label ?? v).join(', ') : '—'}</TableCell>;
                   }
-                  if (fm.type.includes('applookup')) {
+                  if (fm.type.startsWith('multipleapplookup')) {
+                    return (
+                      <TableCell key={fm.key}>
+                        {Array.isArray(val) && val.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {val.map((url: any, i: number) => (
+                              <span key={i} className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{getApplookupDisplay(activeTab, fm.key, url)}</span>
+                            ))}
+                          </div>
+                        ) : '—'}
+                      </TableCell>
+                    );
+                  }
+                  if (fm.type.startsWith('applookup')) {
                     return <TableCell key={fm.key}><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{getApplookupDisplay(activeTab, fm.key, val)}</span></TableCell>;
                   }
                   if (fm.type.includes('date')) {
@@ -777,6 +790,39 @@ export default function AdminPage() {
         </Table>
       </div>
 
+      {(createEntity === 'scope_3_–_weitere_indirekte_emissionen' || dialogState?.entity === 'scope_3_–_weitere_indirekte_emissionen') && (
+        <Scope3WeitereIndirekteEmissionenDialog
+          open={createEntity === 'scope_3_–_weitere_indirekte_emissionen' || dialogState?.entity === 'scope_3_–_weitere_indirekte_emissionen'}
+          onClose={() => { setCreateEntity(null); setDialogState(null); }}
+          onSubmit={dialogState?.entity === 'scope_3_–_weitere_indirekte_emissionen' ? handleUpdate : (fields: any) => handleCreate('scope_3_–_weitere_indirekte_emissionen', fields)}
+          defaultValues={dialogState?.entity === 'scope_3_–_weitere_indirekte_emissionen' ? dialogState.record?.fields : undefined}
+          konzernstrukturList={(data as any).konzernstruktur ?? []}
+          berichtsjahrList={(data as any).berichtsjahr ?? []}
+          emissionsfaktorenList={(data as any).emissionsfaktoren ?? []}
+          enablePhotoScan={AI_PHOTO_SCAN['Scope3WeitereIndirekteEmissionen']}
+          enablePhotoLocation={AI_PHOTO_LOCATION['Scope3WeitereIndirekteEmissionen']}
+        />
+      )}
+      {(createEntity === 'emissionsfaktoren' || dialogState?.entity === 'emissionsfaktoren') && (
+        <EmissionsfaktorenDialog
+          open={createEntity === 'emissionsfaktoren' || dialogState?.entity === 'emissionsfaktoren'}
+          onClose={() => { setCreateEntity(null); setDialogState(null); }}
+          onSubmit={dialogState?.entity === 'emissionsfaktoren' ? handleUpdate : (fields: any) => handleCreate('emissionsfaktoren', fields)}
+          defaultValues={dialogState?.entity === 'emissionsfaktoren' ? dialogState.record?.fields : undefined}
+          enablePhotoScan={AI_PHOTO_SCAN['Emissionsfaktoren']}
+          enablePhotoLocation={AI_PHOTO_LOCATION['Emissionsfaktoren']}
+        />
+      )}
+      {(createEntity === 'berichtsjahr' || dialogState?.entity === 'berichtsjahr') && (
+        <BerichtsjahrDialog
+          open={createEntity === 'berichtsjahr' || dialogState?.entity === 'berichtsjahr'}
+          onClose={() => { setCreateEntity(null); setDialogState(null); }}
+          onSubmit={dialogState?.entity === 'berichtsjahr' ? handleUpdate : (fields: any) => handleCreate('berichtsjahr', fields)}
+          defaultValues={dialogState?.entity === 'berichtsjahr' ? dialogState.record?.fields : undefined}
+          enablePhotoScan={AI_PHOTO_SCAN['Berichtsjahr']}
+          enablePhotoLocation={AI_PHOTO_LOCATION['Berichtsjahr']}
+        />
+      )}
       {(createEntity === 'scope_1_–_direkte_emissionen' || dialogState?.entity === 'scope_1_–_direkte_emissionen') && (
         <Scope1DirekteEmissionenDialog
           open={createEntity === 'scope_1_–_direkte_emissionen' || dialogState?.entity === 'scope_1_–_direkte_emissionen'}
@@ -796,9 +842,9 @@ export default function AdminPage() {
           onClose={() => { setCreateEntity(null); setDialogState(null); }}
           onSubmit={dialogState?.entity === 'scope_2_–_indirekte_energieemissionen' ? handleUpdate : (fields: any) => handleCreate('scope_2_–_indirekte_energieemissionen', fields)}
           defaultValues={dialogState?.entity === 'scope_2_–_indirekte_energieemissionen' ? dialogState.record?.fields : undefined}
-          konzernstrukturList={(data as any).konzernstruktur ?? []}
           berichtsjahrList={(data as any).berichtsjahr ?? []}
           emissionsfaktorenList={(data as any).emissionsfaktoren ?? []}
+          konzernstrukturList={(data as any).konzernstruktur ?? []}
           enablePhotoScan={AI_PHOTO_SCAN['Scope2IndirekteEnergieemissionen']}
           enablePhotoLocation={AI_PHOTO_LOCATION['Scope2IndirekteEnergieemissionen']}
         />
@@ -838,37 +884,31 @@ export default function AdminPage() {
           enablePhotoLocation={AI_PHOTO_LOCATION['Konzernstruktur']}
         />
       )}
-      {(createEntity === 'scope_3_–_weitere_indirekte_emissionen' || dialogState?.entity === 'scope_3_–_weitere_indirekte_emissionen') && (
-        <Scope3WeitereIndirekteEmissionenDialog
-          open={createEntity === 'scope_3_–_weitere_indirekte_emissionen' || dialogState?.entity === 'scope_3_–_weitere_indirekte_emissionen'}
-          onClose={() => { setCreateEntity(null); setDialogState(null); }}
-          onSubmit={dialogState?.entity === 'scope_3_–_weitere_indirekte_emissionen' ? handleUpdate : (fields: any) => handleCreate('scope_3_–_weitere_indirekte_emissionen', fields)}
-          defaultValues={dialogState?.entity === 'scope_3_–_weitere_indirekte_emissionen' ? dialogState.record?.fields : undefined}
+      {viewState?.entity === 'scope_3_–_weitere_indirekte_emissionen' && (
+        <Scope3WeitereIndirekteEmissionenViewDialog
+          open={viewState?.entity === 'scope_3_–_weitere_indirekte_emissionen'}
+          onClose={() => setViewState(null)}
+          record={viewState?.record}
+          onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'scope_3_–_weitere_indirekte_emissionen', record: r }); }}
           konzernstrukturList={(data as any).konzernstruktur ?? []}
           berichtsjahrList={(data as any).berichtsjahr ?? []}
           emissionsfaktorenList={(data as any).emissionsfaktoren ?? []}
-          enablePhotoScan={AI_PHOTO_SCAN['Scope3WeitereIndirekteEmissionen']}
-          enablePhotoLocation={AI_PHOTO_LOCATION['Scope3WeitereIndirekteEmissionen']}
         />
       )}
-      {(createEntity === 'emissionsfaktoren' || dialogState?.entity === 'emissionsfaktoren') && (
-        <EmissionsfaktorenDialog
-          open={createEntity === 'emissionsfaktoren' || dialogState?.entity === 'emissionsfaktoren'}
-          onClose={() => { setCreateEntity(null); setDialogState(null); }}
-          onSubmit={dialogState?.entity === 'emissionsfaktoren' ? handleUpdate : (fields: any) => handleCreate('emissionsfaktoren', fields)}
-          defaultValues={dialogState?.entity === 'emissionsfaktoren' ? dialogState.record?.fields : undefined}
-          enablePhotoScan={AI_PHOTO_SCAN['Emissionsfaktoren']}
-          enablePhotoLocation={AI_PHOTO_LOCATION['Emissionsfaktoren']}
+      {viewState?.entity === 'emissionsfaktoren' && (
+        <EmissionsfaktorenViewDialog
+          open={viewState?.entity === 'emissionsfaktoren'}
+          onClose={() => setViewState(null)}
+          record={viewState?.record}
+          onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'emissionsfaktoren', record: r }); }}
         />
       )}
-      {(createEntity === 'berichtsjahr' || dialogState?.entity === 'berichtsjahr') && (
-        <BerichtsjahrDialog
-          open={createEntity === 'berichtsjahr' || dialogState?.entity === 'berichtsjahr'}
-          onClose={() => { setCreateEntity(null); setDialogState(null); }}
-          onSubmit={dialogState?.entity === 'berichtsjahr' ? handleUpdate : (fields: any) => handleCreate('berichtsjahr', fields)}
-          defaultValues={dialogState?.entity === 'berichtsjahr' ? dialogState.record?.fields : undefined}
-          enablePhotoScan={AI_PHOTO_SCAN['Berichtsjahr']}
-          enablePhotoLocation={AI_PHOTO_LOCATION['Berichtsjahr']}
+      {viewState?.entity === 'berichtsjahr' && (
+        <BerichtsjahrViewDialog
+          open={viewState?.entity === 'berichtsjahr'}
+          onClose={() => setViewState(null)}
+          record={viewState?.record}
+          onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'berichtsjahr', record: r }); }}
         />
       )}
       {viewState?.entity === 'scope_1_–_direkte_emissionen' && (
@@ -888,9 +928,9 @@ export default function AdminPage() {
           onClose={() => setViewState(null)}
           record={viewState?.record}
           onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'scope_2_–_indirekte_energieemissionen', record: r }); }}
-          konzernstrukturList={(data as any).konzernstruktur ?? []}
           berichtsjahrList={(data as any).berichtsjahr ?? []}
           emissionsfaktorenList={(data as any).emissionsfaktoren ?? []}
+          konzernstrukturList={(data as any).konzernstruktur ?? []}
         />
       )}
       {viewState?.entity === 'emissionen_schnelleingabe' && (
@@ -920,33 +960,6 @@ export default function AdminPage() {
           onClose={() => setViewState(null)}
           record={viewState?.record}
           onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'konzernstruktur', record: r }); }}
-        />
-      )}
-      {viewState?.entity === 'scope_3_–_weitere_indirekte_emissionen' && (
-        <Scope3WeitereIndirekteEmissionenViewDialog
-          open={viewState?.entity === 'scope_3_–_weitere_indirekte_emissionen'}
-          onClose={() => setViewState(null)}
-          record={viewState?.record}
-          onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'scope_3_–_weitere_indirekte_emissionen', record: r }); }}
-          konzernstrukturList={(data as any).konzernstruktur ?? []}
-          berichtsjahrList={(data as any).berichtsjahr ?? []}
-          emissionsfaktorenList={(data as any).emissionsfaktoren ?? []}
-        />
-      )}
-      {viewState?.entity === 'emissionsfaktoren' && (
-        <EmissionsfaktorenViewDialog
-          open={viewState?.entity === 'emissionsfaktoren'}
-          onClose={() => setViewState(null)}
-          record={viewState?.record}
-          onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'emissionsfaktoren', record: r }); }}
-        />
-      )}
-      {viewState?.entity === 'berichtsjahr' && (
-        <BerichtsjahrViewDialog
-          open={viewState?.entity === 'berichtsjahr'}
-          onClose={() => setViewState(null)}
-          record={viewState?.record}
-          onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'berichtsjahr', record: r }); }}
         />
       )}
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LivingAppsService, extractRecordId, createRecordUrl } from '@/services/livingAppsService';
-import type { Scope2IndirekteEnergieemissionen, Konzernstruktur, Berichtsjahr, Emissionsfaktoren } from '@/types/app';
+import type { Scope2IndirekteEnergieemissionen, Berichtsjahr, Emissionsfaktoren, Konzernstruktur } from '@/types/app';
 import { APP_IDS } from '@/types/app';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,40 +12,39 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { IconPencil, IconTrash, IconPlus, IconSearch, IconArrowsUpDown, IconArrowUp, IconArrowDown, IconFileText } from '@tabler/icons-react';
 import { Scope2IndirekteEnergieemissionenDialog } from '@/components/dialogs/Scope2IndirekteEnergieemissionenDialog';
-import { Scope2IndirekteEnergieemissionenViewDialog } from '@/components/dialogs/Scope2IndirekteEnergieemissionenViewDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageShell } from '@/components/PageShell';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
 
 export default function Scope2IndirekteEnergieemissionenPage() {
+  const navigate = useNavigate();
   const [records, setRecords] = useState<Scope2IndirekteEnergieemissionen[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<Scope2IndirekteEnergieemissionen | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Scope2IndirekteEnergieemissionen | null>(null);
-  const [viewingRecord, setViewingRecord] = useState<Scope2IndirekteEnergieemissionen | null>(null);
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [konzernstrukturList, setKonzernstrukturList] = useState<Konzernstruktur[]>([]);
   const [berichtsjahrList, setBerichtsjahrList] = useState<Berichtsjahr[]>([]);
   const [emissionsfaktorenList, setEmissionsfaktorenList] = useState<Emissionsfaktoren[]>([]);
+  const [konzernstrukturList, setKonzernstrukturList] = useState<Konzernstruktur[]>([]);
 
   useEffect(() => { loadData(); }, []);
 
   async function loadData() {
     setLoading(true);
     try {
-      const [mainData, konzernstrukturData, berichtsjahrData, emissionsfaktorenData] = await Promise.all([
+      const [mainData, berichtsjahrData, emissionsfaktorenData, konzernstrukturData] = await Promise.all([
         LivingAppsService.getScope2IndirekteEnergieemissionen(),
-        LivingAppsService.getKonzernstruktur(),
         LivingAppsService.getBerichtsjahr(),
         LivingAppsService.getEmissionsfaktoren(),
+        LivingAppsService.getKonzernstruktur(),
       ]);
       setRecords(mainData);
-      setKonzernstrukturList(konzernstrukturData);
       setBerichtsjahrList(berichtsjahrData);
       setEmissionsfaktorenList(emissionsfaktorenData);
+      setKonzernstrukturList(konzernstrukturData);
     } finally {
       setLoading(false);
     }
@@ -70,12 +70,6 @@ export default function Scope2IndirekteEnergieemissionenPage() {
     setDeleteTarget(null);
   }
 
-  function getKonzernstrukturDisplayName(url?: unknown) {
-    if (!url) return '—';
-    const id = extractRecordId(url);
-    return konzernstrukturList.find(r => r.record_id === id)?.fields.einheit_name ?? '—';
-  }
-
   function getBerichtsjahrDisplayName(url?: unknown) {
     if (!url) return '—';
     const id = extractRecordId(url);
@@ -86,6 +80,12 @@ export default function Scope2IndirekteEnergieemissionenPage() {
     if (!url) return '—';
     const id = extractRecordId(url);
     return emissionsfaktorenList.find(r => r.record_id === id)?.fields.ef_bezeichnung ?? '—';
+  }
+
+  function getKonzernstrukturDisplayName(url?: unknown) {
+    if (!url) return '—';
+    const id = extractRecordId(url);
+    return konzernstrukturList.find(r => r.record_id === id)?.fields.einheit_name ?? '—';
   }
 
   const filtered = records.filter(r => {
@@ -151,12 +151,6 @@ export default function Scope2IndirekteEnergieemissionenPage() {
         <Table className="[&_tbody_td]:px-6 [&_tbody_td]:py-2 [&_tbody_td]:text-base [&_tbody_td]:font-medium [&_tbody_tr:first-child_td]:pt-6 [&_tbody_tr:last-child_td]:pb-10">
           <TableHeader className="bg-secondary">
             <TableRow className="border-b border-input">
-              <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('s2_einheit')}>
-                <span className="inline-flex items-center gap-1">
-                  Organisationseinheit
-                  {sortKey === 's2_einheit' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
-                </span>
-              </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('s2_berichtsjahr')}>
                 <span className="inline-flex items-center gap-1">
                   Berichtsjahr
@@ -223,13 +217,18 @@ export default function Scope2IndirekteEnergieemissionenPage() {
                   {sortKey === 's2_nachweis' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
+              <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('s2_einheit')}>
+                <span className="inline-flex items-center gap-1">
+                  Organisationseinheit
+                  {sortKey === 's2_einheit' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
+                </span>
+              </TableHead>
               <TableHead className="w-24 uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6">Aktionen</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sortRecords(filtered).map(record => (
-              <TableRow key={record.record_id} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) return; setViewingRecord(record); }}>
-                <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{getKonzernstrukturDisplayName(record.fields.s2_einheit)}</span></TableCell>
+              <TableRow key={record.record_id} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) return; navigate(`/scope-2-–-indirekte-energieemissionen/${record.record_id}`); }}>
                 <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{getBerichtsjahrDisplayName(record.fields.s2_berichtsjahr)}</span></TableCell>
                 <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{record.fields.s2_energieart?.label ?? '—'}</span></TableCell>
                 <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{record.fields.s2_berechnungsmethode?.label ?? '—'}</span></TableCell>
@@ -241,6 +240,7 @@ export default function Scope2IndirekteEnergieemissionenPage() {
                 <TableCell><span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${record.fields.s2_herkunftsnachweis ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>{record.fields.s2_herkunftsnachweis ? 'Ja' : 'Nein'}</span></TableCell>
                 <TableCell className="max-w-xs"><span className="truncate block">{record.fields.s2_bemerkungen ?? '—'}</span></TableCell>
                 <TableCell>{record.fields.s2_nachweis ? <div className="relative h-8 w-8 rounded bg-muted overflow-hidden"><div className="absolute inset-0 flex items-center justify-center"><IconFileText size={14} className="text-muted-foreground" /></div><img src={record.fields.s2_nachweis} alt="" className="relative h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} /></div> : '—'}</TableCell>
+                <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{getKonzernstrukturDisplayName(record.fields.s2_einheit)}</span></TableCell>
                 <TableCell>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" onClick={() => setEditingRecord(record)}>
@@ -269,9 +269,10 @@ export default function Scope2IndirekteEnergieemissionenPage() {
         onClose={() => { setDialogOpen(false); setEditingRecord(null); }}
         onSubmit={editingRecord ? handleUpdate : handleCreate}
         defaultValues={editingRecord?.fields}
-        konzernstrukturList={konzernstrukturList}
+        recordId={editingRecord?.record_id}
         berichtsjahrList={berichtsjahrList}
         emissionsfaktorenList={emissionsfaktorenList}
+        konzernstrukturList={konzernstrukturList}
         enablePhotoScan={AI_PHOTO_SCAN['Scope2IndirekteEnergieemissionen']}
         enablePhotoLocation={AI_PHOTO_LOCATION['Scope2IndirekteEnergieemissionen']}
       />
@@ -284,15 +285,6 @@ export default function Scope2IndirekteEnergieemissionenPage() {
         description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
       />
 
-      <Scope2IndirekteEnergieemissionenViewDialog
-        open={!!viewingRecord}
-        onClose={() => setViewingRecord(null)}
-        record={viewingRecord}
-        onEdit={(r) => { setViewingRecord(null); setEditingRecord(r); }}
-        konzernstrukturList={konzernstrukturList}
-        berichtsjahrList={berichtsjahrList}
-        emissionsfaktorenList={emissionsfaktorenList}
-      />
     </PageShell>
   );
 }

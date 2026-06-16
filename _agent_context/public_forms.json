@@ -2,6 +2,59 @@
   "version": 1,
   "forms": [
     {
+      "entity": "scope_3_–_weitere_indirekte_emissionen",
+      "app_id": "69c12471ef7da5f0b841a1a3",
+      "path": "/rest/apps/69c12471ef7da5f0b841a1a3/records",
+      "allowed_fields": [
+        "s3_kategorie",
+        "s3_aktivitaet",
+        "s3_berechnungsmethode",
+        "s3_aktivitaetsmenge",
+        "s3_einheit_aktivitaet",
+        "s3_co2e_menge",
+        "s3_datenqualitaet",
+        "s3_bemerkungen"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Scope 3 – Weitere indirekte Emissionen — Formular"
+    },
+    {
+      "entity": "emissionsfaktoren",
+      "app_id": "69c1246ebeed0889fed560e2",
+      "path": "/rest/apps/69c1246ebeed0889fed560e2/records",
+      "allowed_fields": [
+        "ef_bezeichnung",
+        "ef_scope",
+        "ef_kategorie",
+        "ef_energietraeger",
+        "ef_einheit",
+        "ef_faktor",
+        "ef_treibhausgas",
+        "ef_quelle",
+        "ef_gueltigkeitsjahr"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Emissionsfaktoren — Formular"
+    },
+    {
+      "entity": "berichtsjahr",
+      "app_id": "69c1246d7299804c440448fa",
+      "path": "/rest/apps/69c1246d7299804c440448fa/records",
+      "allowed_fields": [
+        "jahr",
+        "startdatum",
+        "enddatum",
+        "ist_basisjahr",
+        "status_jahr",
+        "anmerkungen_jahr"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Berichtsjahr — Formular"
+    },
+    {
       "entity": "scope_1_–_direkte_emissionen",
       "app_id": "69c1246ff4e0dc2324ed9440",
       "path": "/rest/apps/69c1246ff4e0dc2324ed9440/records",
@@ -95,59 +148,6 @@
       "pow": true,
       "pow_difficulty": 50000,
       "title": "Konzernstruktur — Formular"
-    },
-    {
-      "entity": "scope_3_–_weitere_indirekte_emissionen",
-      "app_id": "69c12471ef7da5f0b841a1a3",
-      "path": "/rest/apps/69c12471ef7da5f0b841a1a3/records",
-      "allowed_fields": [
-        "s3_kategorie",
-        "s3_aktivitaet",
-        "s3_berechnungsmethode",
-        "s3_aktivitaetsmenge",
-        "s3_einheit_aktivitaet",
-        "s3_co2e_menge",
-        "s3_datenqualitaet",
-        "s3_bemerkungen"
-      ],
-      "pow": true,
-      "pow_difficulty": 50000,
-      "title": "Scope 3 – Weitere indirekte Emissionen — Formular"
-    },
-    {
-      "entity": "emissionsfaktoren",
-      "app_id": "69c1246ebeed0889fed560e2",
-      "path": "/rest/apps/69c1246ebeed0889fed560e2/records",
-      "allowed_fields": [
-        "ef_bezeichnung",
-        "ef_scope",
-        "ef_kategorie",
-        "ef_energietraeger",
-        "ef_einheit",
-        "ef_faktor",
-        "ef_treibhausgas",
-        "ef_quelle",
-        "ef_gueltigkeitsjahr"
-      ],
-      "pow": true,
-      "pow_difficulty": 50000,
-      "title": "Emissionsfaktoren — Formular"
-    },
-    {
-      "entity": "berichtsjahr",
-      "app_id": "69c1246d7299804c440448fa",
-      "path": "/rest/apps/69c1246d7299804c440448fa/records",
-      "allowed_fields": [
-        "jahr",
-        "startdatum",
-        "enddatum",
-        "ist_basisjahr",
-        "status_jahr",
-        "anmerkungen_jahr"
-      ],
-      "pow": true,
-      "pow_difficulty": 50000,
-      "title": "Berichtsjahr — Formular"
     }
   ]
 }

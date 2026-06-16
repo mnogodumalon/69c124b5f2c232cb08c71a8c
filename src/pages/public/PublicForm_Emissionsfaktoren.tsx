@@ -131,32 +131,62 @@ export default function PublicFormEmissionsfaktoren() {
             <Label htmlFor="ef_bezeichnung">Bezeichnung</Label>
             <Input
               id="ef_bezeichnung"
+              placeholder=""
               value={fields.ef_bezeichnung ?? ''}
               onChange={e => setFields(f => ({ ...f, ef_bezeichnung: e.target.value }))}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="ef_scope">Scope-Zuordnung</Label>
-            <Select
-              value={lookupKey(fields.ef_scope) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, ef_scope: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="ef_scope"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="scope1">Scope 1</SelectItem>
-                <SelectItem value="scope2">Scope 2</SelectItem>
-                <SelectItem value="scope3">Scope 3</SelectItem>
-              </SelectContent>
-            </Select>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.ef_scope) === 'scope1'}
+                onClick={() => setFields(f => ({ ...f, ef_scope: (lookupKey(f.ef_scope) === 'scope1' ? undefined : 'scope1') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.ef_scope) === 'scope1'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Scope 1
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.ef_scope) === 'scope2'}
+                onClick={() => setFields(f => ({ ...f, ef_scope: (lookupKey(f.ef_scope) === 'scope2' ? undefined : 'scope2') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.ef_scope) === 'scope2'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Scope 2
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.ef_scope) === 'scope3'}
+                onClick={() => setFields(f => ({ ...f, ef_scope: (lookupKey(f.ef_scope) === 'scope3' ? undefined : 'scope3') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.ef_scope) === 'scope3'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Scope 3
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="ef_kategorie">Kategorie</Label>
             <Select
-              value={lookupKey(fields.ef_kategorie) ?? 'none'}
+              value={lookupKey(fields.ef_kategorie) ?? ''}
               onValueChange={v => setFields(f => ({ ...f, ef_kategorie: v === 'none' ? undefined : v as any }))}
             >
-              <SelectTrigger id="ef_kategorie"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
+              <SelectTrigger id="ef_kategorie"><SelectValue placeholder="" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">—</SelectItem>
                 <SelectItem value="stationaere_verbrennung">Stationäre Verbrennung</SelectItem>
@@ -177,6 +207,7 @@ export default function PublicFormEmissionsfaktoren() {
             <Label htmlFor="ef_energietraeger">Energieträger / Aktivität</Label>
             <Input
               id="ef_energietraeger"
+              placeholder=""
               value={fields.ef_energietraeger ?? ''}
               onChange={e => setFields(f => ({ ...f, ef_energietraeger: e.target.value }))}
             />
@@ -184,10 +215,10 @@ export default function PublicFormEmissionsfaktoren() {
           <div className="space-y-2">
             <Label htmlFor="ef_einheit">Einheit</Label>
             <Select
-              value={lookupKey(fields.ef_einheit) ?? 'none'}
+              value={lookupKey(fields.ef_einheit) ?? ''}
               onValueChange={v => setFields(f => ({ ...f, ef_einheit: v === 'none' ? undefined : v as any }))}
             >
-              <SelectTrigger id="ef_einheit"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
+              <SelectTrigger id="ef_einheit"><SelectValue placeholder="" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">—</SelectItem>
                 <SelectItem value="kwh">kWh</SelectItem>
@@ -209,8 +240,11 @@ export default function PublicFormEmissionsfaktoren() {
             <Input
               id="ef_faktor"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.ef_faktor ?? ''}
-              onChange={e => setFields(f => ({ ...f, ef_faktor: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, ef_faktor: n })); }}
             />
           </div>
           <div className="space-y-2">
@@ -320,6 +354,7 @@ export default function PublicFormEmissionsfaktoren() {
             <Label htmlFor="ef_quelle">Quelle / Referenz</Label>
             <Input
               id="ef_quelle"
+              placeholder=""
               value={fields.ef_quelle ?? ''}
               onChange={e => setFields(f => ({ ...f, ef_quelle: e.target.value }))}
             />
@@ -329,8 +364,11 @@ export default function PublicFormEmissionsfaktoren() {
             <Input
               id="ef_gueltigkeitsjahr"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.ef_gueltigkeitsjahr ?? ''}
-              onChange={e => setFields(f => ({ ...f, ef_gueltigkeitsjahr: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, ef_gueltigkeitsjahr: n })); }}
             />
           </div>
 

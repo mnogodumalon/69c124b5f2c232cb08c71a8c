@@ -130,10 +130,10 @@ export default function PublicFormScope3WeitereIndirekteEmissionen() {
           <div className="space-y-2">
             <Label htmlFor="s3_kategorie">Scope-3-Kategorie</Label>
             <Select
-              value={lookupKey(fields.s3_kategorie) ?? 'none'}
+              value={lookupKey(fields.s3_kategorie) ?? ''}
               onValueChange={v => setFields(f => ({ ...f, s3_kategorie: v === 'none' ? undefined : v as any }))}
             >
-              <SelectTrigger id="s3_kategorie"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
+              <SelectTrigger id="s3_kategorie"><SelectValue placeholder="" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">—</SelectItem>
                 <SelectItem value="kat1">Kat. 1: Eingekaufte Waren und Dienstleistungen</SelectItem>
@@ -158,6 +158,7 @@ export default function PublicFormScope3WeitereIndirekteEmissionen() {
             <Label htmlFor="s3_aktivitaet">Aktivitätsbeschreibung</Label>
             <Textarea
               id="s3_aktivitaet"
+              placeholder=""
               value={fields.s3_aktivitaet ?? ''}
               onChange={e => setFields(f => ({ ...f, s3_aktivitaet: e.target.value }))}
               rows={3}
@@ -165,36 +166,80 @@ export default function PublicFormScope3WeitereIndirekteEmissionen() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="s3_berechnungsmethode">Berechnungsmethode</Label>
-            <Select
-              value={lookupKey(fields.s3_berechnungsmethode) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, s3_berechnungsmethode: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="s3_berechnungsmethode"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="ausgabenbasiert">Ausgabenbasiert</SelectItem>
-                <SelectItem value="aktivitaetsbasiert">Aktivitätsbasiert</SelectItem>
-                <SelectItem value="hybrid">Hybridmethode</SelectItem>
-                <SelectItem value="lieferantenspezifisch">Lieferantenspezifisch</SelectItem>
-              </SelectContent>
-            </Select>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s3_berechnungsmethode) === 'ausgabenbasiert'}
+                onClick={() => setFields(f => ({ ...f, s3_berechnungsmethode: (lookupKey(f.s3_berechnungsmethode) === 'ausgabenbasiert' ? undefined : 'ausgabenbasiert') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s3_berechnungsmethode) === 'ausgabenbasiert'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Ausgabenbasiert
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s3_berechnungsmethode) === 'aktivitaetsbasiert'}
+                onClick={() => setFields(f => ({ ...f, s3_berechnungsmethode: (lookupKey(f.s3_berechnungsmethode) === 'aktivitaetsbasiert' ? undefined : 'aktivitaetsbasiert') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s3_berechnungsmethode) === 'aktivitaetsbasiert'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Aktivitätsbasiert
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s3_berechnungsmethode) === 'hybrid'}
+                onClick={() => setFields(f => ({ ...f, s3_berechnungsmethode: (lookupKey(f.s3_berechnungsmethode) === 'hybrid' ? undefined : 'hybrid') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s3_berechnungsmethode) === 'hybrid'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Hybridmethode
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s3_berechnungsmethode) === 'lieferantenspezifisch'}
+                onClick={() => setFields(f => ({ ...f, s3_berechnungsmethode: (lookupKey(f.s3_berechnungsmethode) === 'lieferantenspezifisch' ? undefined : 'lieferantenspezifisch') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s3_berechnungsmethode) === 'lieferantenspezifisch'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Lieferantenspezifisch
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="s3_aktivitaetsmenge">Aktivitätsmenge</Label>
             <Input
               id="s3_aktivitaetsmenge"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.s3_aktivitaetsmenge ?? ''}
-              onChange={e => setFields(f => ({ ...f, s3_aktivitaetsmenge: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, s3_aktivitaetsmenge: n })); }}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="s3_einheit_aktivitaet">Einheit der Aktivitätsmenge</Label>
             <Select
-              value={lookupKey(fields.s3_einheit_aktivitaet) ?? 'none'}
+              value={lookupKey(fields.s3_einheit_aktivitaet) ?? ''}
               onValueChange={v => setFields(f => ({ ...f, s3_einheit_aktivitaet: v === 'none' ? undefined : v as any }))}
             >
-              <SelectTrigger id="s3_einheit_aktivitaet"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
+              <SelectTrigger id="s3_einheit_aktivitaet"><SelectValue placeholder="" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">—</SelectItem>
                 <SelectItem value="kwh">kWh</SelectItem>
@@ -215,29 +260,62 @@ export default function PublicFormScope3WeitereIndirekteEmissionen() {
             <Input
               id="s3_co2e_menge"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.s3_co2e_menge ?? ''}
-              onChange={e => setFields(f => ({ ...f, s3_co2e_menge: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, s3_co2e_menge: n })); }}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="s3_datenqualitaet">Datenqualität</Label>
-            <Select
-              value={lookupKey(fields.s3_datenqualitaet) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, s3_datenqualitaet: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="s3_datenqualitaet"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="primaer">Primärdaten</SelectItem>
-                <SelectItem value="sekundaer">Sekundärdaten</SelectItem>
-                <SelectItem value="schaetzung">Schätzung</SelectItem>
-              </SelectContent>
-            </Select>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s3_datenqualitaet) === 'primaer'}
+                onClick={() => setFields(f => ({ ...f, s3_datenqualitaet: (lookupKey(f.s3_datenqualitaet) === 'primaer' ? undefined : 'primaer') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s3_datenqualitaet) === 'primaer'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Primärdaten
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s3_datenqualitaet) === 'sekundaer'}
+                onClick={() => setFields(f => ({ ...f, s3_datenqualitaet: (lookupKey(f.s3_datenqualitaet) === 'sekundaer' ? undefined : 'sekundaer') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s3_datenqualitaet) === 'sekundaer'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Sekundärdaten
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s3_datenqualitaet) === 'schaetzung'}
+                onClick={() => setFields(f => ({ ...f, s3_datenqualitaet: (lookupKey(f.s3_datenqualitaet) === 'schaetzung' ? undefined : 'schaetzung') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s3_datenqualitaet) === 'schaetzung'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Schätzung
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="s3_bemerkungen">Bemerkungen</Label>
             <Textarea
               id="s3_bemerkungen"
+              placeholder=""
               value={fields.s3_bemerkungen ?? ''}
               onChange={e => setFields(f => ({ ...f, s3_bemerkungen: e.target.value }))}
               rows={3}

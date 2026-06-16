@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LivingAppsService, extractRecordId, createRecordUrl } from '@/services/livingAppsService';
 import type { GhgBerichtsuebersicht, Berichtsjahr, Konzernstruktur } from '@/types/app';
 import { APP_IDS } from '@/types/app';
@@ -11,7 +12,6 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { IconPencil, IconTrash, IconPlus, IconSearch, IconArrowsUpDown, IconArrowUp, IconArrowDown } from '@tabler/icons-react';
 import { GhgBerichtsuebersichtDialog } from '@/components/dialogs/GhgBerichtsuebersichtDialog';
-import { GhgBerichtsuebersichtViewDialog } from '@/components/dialogs/GhgBerichtsuebersichtViewDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageShell } from '@/components/PageShell';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
@@ -24,13 +24,13 @@ function formatDate(d?: string) {
 }
 
 export default function GhgBerichtsuebersichtPage() {
+  const navigate = useNavigate();
   const [records, setRecords] = useState<GhgBerichtsuebersicht[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<GhgBerichtsuebersicht | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<GhgBerichtsuebersicht | null>(null);
-  const [viewingRecord, setViewingRecord] = useState<GhgBerichtsuebersicht | null>(null);
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [berichtsjahrList, setBerichtsjahrList] = useState<Berichtsjahr[]>([]);
@@ -244,7 +244,7 @@ export default function GhgBerichtsuebersichtPage() {
           </TableHeader>
           <TableBody>
             {sortRecords(filtered).map(record => (
-              <TableRow key={record.record_id} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) return; setViewingRecord(record); }}>
+              <TableRow key={record.record_id} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) return; navigate(`/ghg-berichtsuebersicht/${record.record_id}`); }}>
                 <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{getBerichtsjahrDisplayName(record.fields.gb_berichtsjahr)}</span></TableCell>
                 <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{getKonzernstrukturDisplayName(record.fields.gb_konzerneinheit)}</span></TableCell>
                 <TableCell>{record.fields.gb_scope1_gesamt ?? '—'}</TableCell>
@@ -288,6 +288,7 @@ export default function GhgBerichtsuebersichtPage() {
         onClose={() => { setDialogOpen(false); setEditingRecord(null); }}
         onSubmit={editingRecord ? handleUpdate : handleCreate}
         defaultValues={editingRecord?.fields}
+        recordId={editingRecord?.record_id}
         berichtsjahrList={berichtsjahrList}
         konzernstrukturList={konzernstrukturList}
         enablePhotoScan={AI_PHOTO_SCAN['GhgBerichtsuebersicht']}
@@ -302,14 +303,6 @@ export default function GhgBerichtsuebersichtPage() {
         description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
       />
 
-      <GhgBerichtsuebersichtViewDialog
-        open={!!viewingRecord}
-        onClose={() => setViewingRecord(null)}
-        record={viewingRecord}
-        onEdit={(r) => { setViewingRecord(null); setEditingRecord(r); }}
-        berichtsjahrList={berichtsjahrList}
-        konzernstrukturList={konzernstrukturList}
-      />
     </PageShell>
   );
 }

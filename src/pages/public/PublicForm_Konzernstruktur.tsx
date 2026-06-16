@@ -131,31 +131,86 @@ export default function PublicFormKonzernstruktur() {
             <Label htmlFor="einheit_name">Name der Einheit</Label>
             <Input
               id="einheit_name"
+              placeholder=""
               value={fields.einheit_name ?? ''}
               onChange={e => setFields(f => ({ ...f, einheit_name: e.target.value }))}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="einheit_typ">Typ der Einheit</Label>
-            <Select
-              value={lookupKey(fields.einheit_typ) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, einheit_typ: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="einheit_typ"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="konzern">Konzern</SelectItem>
-                <SelectItem value="tochtergesellschaft">Tochtergesellschaft</SelectItem>
-                <SelectItem value="abteilung">Abteilung</SelectItem>
-                <SelectItem value="werk">Werk</SelectItem>
-                <SelectItem value="niederlassung">Niederlassung</SelectItem>
-              </SelectContent>
-            </Select>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.einheit_typ) === 'konzern'}
+                onClick={() => setFields(f => ({ ...f, einheit_typ: (lookupKey(f.einheit_typ) === 'konzern' ? undefined : 'konzern') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.einheit_typ) === 'konzern'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Konzern
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.einheit_typ) === 'tochtergesellschaft'}
+                onClick={() => setFields(f => ({ ...f, einheit_typ: (lookupKey(f.einheit_typ) === 'tochtergesellschaft' ? undefined : 'tochtergesellschaft') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.einheit_typ) === 'tochtergesellschaft'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Tochtergesellschaft
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.einheit_typ) === 'abteilung'}
+                onClick={() => setFields(f => ({ ...f, einheit_typ: (lookupKey(f.einheit_typ) === 'abteilung' ? undefined : 'abteilung') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.einheit_typ) === 'abteilung'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Abteilung
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.einheit_typ) === 'werk'}
+                onClick={() => setFields(f => ({ ...f, einheit_typ: (lookupKey(f.einheit_typ) === 'werk' ? undefined : 'werk') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.einheit_typ) === 'werk'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Werk
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.einheit_typ) === 'niederlassung'}
+                onClick={() => setFields(f => ({ ...f, einheit_typ: (lookupKey(f.einheit_typ) === 'niederlassung' ? undefined : 'niederlassung') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.einheit_typ) === 'niederlassung'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Niederlassung
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="uebergeordnete_einheit">Übergeordnete Einheit (Name)</Label>
             <Input
               id="uebergeordnete_einheit"
+              placeholder=""
               value={fields.uebergeordnete_einheit ?? ''}
               onChange={e => setFields(f => ({ ...f, uebergeordnete_einheit: e.target.value }))}
             />
@@ -171,10 +226,10 @@ export default function PublicFormKonzernstruktur() {
           <div className="space-y-2">
             <Label htmlFor="branche">Branche</Label>
             <Select
-              value={lookupKey(fields.branche) ?? 'none'}
+              value={lookupKey(fields.branche) ?? ''}
               onValueChange={v => setFields(f => ({ ...f, branche: v === 'none' ? undefined : v as any }))}
             >
-              <SelectTrigger id="branche"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
+              <SelectTrigger id="branche"><SelectValue placeholder="" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">—</SelectItem>
                 <SelectItem value="industrie">Industrie & Fertigung</SelectItem>
@@ -191,23 +246,53 @@ export default function PublicFormKonzernstruktur() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="konsolidierungsmethode">Konsolidierungsmethode</Label>
-            <Select
-              value={lookupKey(fields.konsolidierungsmethode) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, konsolidierungsmethode: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="konsolidierungsmethode"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="operationale_kontrolle">Operationale Kontrolle</SelectItem>
-                <SelectItem value="finanzielle_kontrolle">Finanzielle Kontrolle</SelectItem>
-                <SelectItem value="equity_anteil">Equity-Anteil</SelectItem>
-              </SelectContent>
-            </Select>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.konsolidierungsmethode) === 'operationale_kontrolle'}
+                onClick={() => setFields(f => ({ ...f, konsolidierungsmethode: (lookupKey(f.konsolidierungsmethode) === 'operationale_kontrolle' ? undefined : 'operationale_kontrolle') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.konsolidierungsmethode) === 'operationale_kontrolle'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Operationale Kontrolle
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.konsolidierungsmethode) === 'finanzielle_kontrolle'}
+                onClick={() => setFields(f => ({ ...f, konsolidierungsmethode: (lookupKey(f.konsolidierungsmethode) === 'finanzielle_kontrolle' ? undefined : 'finanzielle_kontrolle') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.konsolidierungsmethode) === 'finanzielle_kontrolle'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Finanzielle Kontrolle
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.konsolidierungsmethode) === 'equity_anteil'}
+                onClick={() => setFields(f => ({ ...f, konsolidierungsmethode: (lookupKey(f.konsolidierungsmethode) === 'equity_anteil' ? undefined : 'equity_anteil') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.konsolidierungsmethode) === 'equity_anteil'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Equity-Anteil
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="verantwortlich_vorname">Vorname der verantwortlichen Person</Label>
             <Input
               id="verantwortlich_vorname"
+              placeholder=""
               value={fields.verantwortlich_vorname ?? ''}
               onChange={e => setFields(f => ({ ...f, verantwortlich_vorname: e.target.value }))}
             />
@@ -216,6 +301,7 @@ export default function PublicFormKonzernstruktur() {
             <Label htmlFor="verantwortlich_nachname">Nachname der verantwortlichen Person</Label>
             <Input
               id="verantwortlich_nachname"
+              placeholder=""
               value={fields.verantwortlich_nachname ?? ''}
               onChange={e => setFields(f => ({ ...f, verantwortlich_nachname: e.target.value }))}
             />
@@ -225,6 +311,7 @@ export default function PublicFormKonzernstruktur() {
             <Input
               id="verantwortlich_email"
               type="email"
+              placeholder=""
               value={fields.verantwortlich_email ?? ''}
               onChange={e => setFields(f => ({ ...f, verantwortlich_email: e.target.value }))}
             />
@@ -233,6 +320,7 @@ export default function PublicFormKonzernstruktur() {
             <Label htmlFor="anmerkungen_einheit">Anmerkungen</Label>
             <Textarea
               id="anmerkungen_einheit"
+              placeholder=""
               value={fields.anmerkungen_einheit ?? ''}
               onChange={e => setFields(f => ({ ...f, anmerkungen_einheit: e.target.value }))}
               rows={3}

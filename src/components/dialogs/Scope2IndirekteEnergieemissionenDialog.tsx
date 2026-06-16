@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import type { Scope2IndirekteEnergieemissionen, Konzernstruktur, Berichtsjahr, Emissionsfaktoren } from '@/types/app';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import type { Scope2IndirekteEnergieemissionen, Berichtsjahr, Emissionsfaktoren, Konzernstruktur } from '@/types/app';
 import { APP_IDS } from '@/types/app';
-import { extractRecordId, createRecordUrl, cleanFieldsForApi, uploadFile, getUserProfile } from '@/services/livingAppsService';
+import { extractRecordId, createRecordUrl, cleanFieldsForApi, uploadFile, getUserProfile, LivingAppsService } from '@/services/livingAppsService';
 import {
   Dialog, DialogContent, DialogHeader,
   DialogTitle, DialogFooter,
@@ -9,13 +9,17 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import type { ComputedContext } from '@/config/form-enhancements/types';
+import { applyFieldOrder, flattenFieldOrder, applyDefaults, evalComputed, numberInputProps, clampNumberValue, classifyComputed, extractApplookupRefs, mergeApplookupRefs, resolveApplookupRef } from '@/config/form-enhancements/types';
+import { formEnhancements, computedDeps, computedApplookupRefs } from '@/config/form-enhancements/Scope2IndirekteEnergieemissionen';
+import { AttachmentsSection } from '@/components/AttachmentsSection';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select, SelectContent, SelectItem,
-  SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { Combobox } from '@/components/Combobox';
+import { BerichtsjahrDialog } from '@/components/dialogs/BerichtsjahrDialog';
+import { EmissionsfaktorenDialog } from '@/components/dialogs/EmissionsfaktorenDialog';
+import { KonzernstrukturDialog } from '@/components/dialogs/KonzernstrukturDialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { IconArrowBigDownLinesFilled, IconCamera, IconCircleCheck, IconClipboard, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
+import { IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
 import { fileToDataUri, extractFromInput, extractPhotoMeta, reverseGeocode, dataUriToBlob } from '@/lib/ai';
 import { lookupKey } from '@/lib/formatters';
 
@@ -24,16 +28,81 @@ interface Scope2IndirekteEnergieemissionenDialogProps {
   onClose: () => void;
   onSubmit: (fields: Scope2IndirekteEnergieemissionen['fields']) => Promise<void>;
   defaultValues?: Scope2IndirekteEnergieemissionen['fields'];
-  konzernstrukturList: Konzernstruktur[];
+  /** Record id when editing — enables the attachments section. Omit on create. */
+  recordId?: string;
   berichtsjahrList: Berichtsjahr[];
   emissionsfaktorenList: Emissionsfaktoren[];
+  konzernstrukturList: Konzernstruktur[];
   enablePhotoScan?: boolean;
   enablePhotoLocation?: boolean;
 }
 
-export function Scope2IndirekteEnergieemissionenDialog({ open, onClose, onSubmit, defaultValues, konzernstrukturList, berichtsjahrList, emissionsfaktorenList, enablePhotoScan = true, enablePhotoLocation = true }: Scope2IndirekteEnergieemissionenDialogProps) {
+export function Scope2IndirekteEnergieemissionenDialog({ open, onClose, onSubmit, defaultValues, recordId, berichtsjahrList, emissionsfaktorenList, konzernstrukturList, enablePhotoScan = true, enablePhotoLocation = true }: Scope2IndirekteEnergieemissionenDialogProps) {
   const [fields, setFields] = useState<Partial<Scope2IndirekteEnergieemissionen['fields']>>({});
   const [saving, setSaving] = useState(false);
+  // Dirty-tracking: in edit-mode the Speichern button is disabled until the
+  // user actually changes something. JSON.stringify is good enough for our
+  // fields (plain values + LookupValue objects + string arrays).
+  const isDirty = useMemo(() => {
+    if (!defaultValues) return true;  // create-mode: always allow submit
+    try {
+      return JSON.stringify(fields) !== JSON.stringify(defaultValues);
+    } catch {
+      return true;
+    }
+  }, [fields, defaultValues]);
+  // Inline-Create state for "Berichtsjahr" target. The dropdown's
+  // "+ Neuer …" option opens a sub-dialog; on submit we POST, add the new
+  // record to the local `extraBerichtsjahr` list, and select it in
+  // the originating Combobox via the captured `createBerichtsjahrField`.
+  const [createBerichtsjahrOpen, setCreateBerichtsjahrOpen] = useState(false);
+  const [createBerichtsjahrInitial, setCreateBerichtsjahrInitial] = useState('');
+  const [createBerichtsjahrField, setCreateBerichtsjahrField] = useState<string>('');
+  const [extraBerichtsjahr, setExtraBerichtsjahr] = useState< Berichtsjahr[]>([]);
+  const berichtsjahrListAll = useMemo(
+    () => [...berichtsjahrList, ...extraBerichtsjahr],
+    [berichtsjahrList, extraBerichtsjahr],
+  );
+  function openCreateBerichtsjahr(fieldKey: string, q: string) {
+    setCreateBerichtsjahrField(fieldKey);
+    setCreateBerichtsjahrInitial(q);
+    setCreateBerichtsjahrOpen(true);
+  }
+  // Inline-Create state for "Emissionsfaktoren" target. The dropdown's
+  // "+ Neuer …" option opens a sub-dialog; on submit we POST, add the new
+  // record to the local `extraEmissionsfaktoren` list, and select it in
+  // the originating Combobox via the captured `createEmissionsfaktorenField`.
+  const [createEmissionsfaktorenOpen, setCreateEmissionsfaktorenOpen] = useState(false);
+  const [createEmissionsfaktorenInitial, setCreateEmissionsfaktorenInitial] = useState('');
+  const [createEmissionsfaktorenField, setCreateEmissionsfaktorenField] = useState<string>('');
+  const [extraEmissionsfaktoren, setExtraEmissionsfaktoren] = useState< Emissionsfaktoren[]>([]);
+  const emissionsfaktorenListAll = useMemo(
+    () => [...emissionsfaktorenList, ...extraEmissionsfaktoren],
+    [emissionsfaktorenList, extraEmissionsfaktoren],
+  );
+  function openCreateEmissionsfaktoren(fieldKey: string, q: string) {
+    setCreateEmissionsfaktorenField(fieldKey);
+    setCreateEmissionsfaktorenInitial(q);
+    setCreateEmissionsfaktorenOpen(true);
+  }
+  // Inline-Create state for "Konzernstruktur" target. The dropdown's
+  // "+ Neuer …" option opens a sub-dialog; on submit we POST, add the new
+  // record to the local `extraKonzernstruktur` list, and select it in
+  // the originating Combobox via the captured `createKonzernstrukturField`.
+  const [createKonzernstrukturOpen, setCreateKonzernstrukturOpen] = useState(false);
+  const [createKonzernstrukturInitial, setCreateKonzernstrukturInitial] = useState('');
+  const [createKonzernstrukturField, setCreateKonzernstrukturField] = useState<string>('');
+  const [extraKonzernstruktur, setExtraKonzernstruktur] = useState< Konzernstruktur[]>([]);
+  const konzernstrukturListAll = useMemo(
+    () => [...konzernstrukturList, ...extraKonzernstruktur],
+    [konzernstrukturList, extraKonzernstruktur],
+  );
+  function openCreateKonzernstruktur(fieldKey: string, q: string) {
+    setCreateKonzernstrukturField(fieldKey);
+    setCreateKonzernstrukturInitial(q);
+    setCreateKonzernstrukturOpen(true);
+  }
+  const [aiOpen, setAiOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -48,9 +117,44 @@ export function Scope2IndirekteEnergieemissionenDialog({ open, onClose, onSubmit
   const [profileLoading, setProfileLoading] = useState(false);
   const [aiText, setAiText] = useState('');
 
+  // Computed-field plumbing. Pure no-op when formEnhancements.computed is {}.
+  // The number renderer uses computedValues only as a fallback when the user
+  // hasn't typed anything — clearing the input always restores the computation.
+  // computedContext exposes applookup list props so { kind: 'applookup', ... }
+  // operands can resolve to numeric fields on the target record.
+  const computedContext = useMemo<ComputedContext>(() => ({
+    lookupLists: {
+      's2_berichtsjahr': berichtsjahrList,
+      's2_emissionsfaktor': emissionsfaktorenList,
+      's2_einheit': konzernstrukturList,
+    },
+  }), [berichtsjahrList, emissionsfaktorenList, konzernstrukturList, ]);
+  const computedValues = useMemo<Record<string, number | null>>(() => {
+    let out: Record<string, number | null> = {};
+    const entries = Object.entries(formEnhancements.computed);
+    for (let i = 0; i < 5; i++) {
+      const merged: Record<string, unknown> = { ...(fields as Record<string, unknown>) };
+      for (const [k, v] of Object.entries(out)) {
+        if (v === null) continue;
+        const cur = merged[k];
+        if (cur === undefined || cur === null || cur === '') merged[k] = v;
+      }
+      const next: Record<string, number | null> = {};
+      let changed = false;
+      for (const [key, spec] of entries) {
+        const v = evalComputed(spec, merged, computedContext);
+        next[key] = v;
+        if (v !== out[key]) changed = true;
+      }
+      out = next;
+      if (!changed) break;
+    }
+    return out;
+  }, [fields, computedContext]);
+
   useEffect(() => {
     if (open) {
-      setFields(defaultValues ?? {});
+      setFields(applyDefaults((defaultValues ?? {}) as Record<string, unknown>, formEnhancements.defaults) as Partial<Scope2IndirekteEnergieemissionen['fields']>);
       setPreview(null);
       setScanSuccess(false);
       setAiText('');
@@ -77,7 +181,21 @@ export function Scope2IndirekteEnergieemissionenDialog({ open, onClose, onSubmit
     e.preventDefault();
     setSaving(true);
     try {
-      const clean = cleanFieldsForApi({ ...fields }, 'scope_2_–_indirekte_energieemissionen');
+      // Fill empty number slots from computed values; user-typed values always win.
+      // CRITICAL: only backend-mapped keys may be backfilled. Virtual computeds
+      // (sub-agent invents `_netto`, `_bestellung_gesamtbetrag` etc. for the
+      // "Berechnungen" display) have no backend counterpart — writing them
+      // triggers a 422 from the Living-Apps API ("field does not exist").
+      const merged = { ...fields };
+      for (const [key, val] of Object.entries(computedValues)) {
+        if (val === null) continue;
+        if (!backendFieldSet.has(key)) continue;
+        const cur = (merged as Record<string, unknown>)[key];
+        if (cur === undefined || cur === null || cur === '') {
+          (merged as Record<string, unknown>)[key] = val;
+        }
+      }
+      const clean = cleanFieldsForApi(merged, 'scope_2_–_indirekte_energieemissionen');
       await onSubmit(clean as Scope2IndirekteEnergieemissionen['fields']);
       onClose();
     } finally {
@@ -112,9 +230,9 @@ export function Scope2IndirekteEnergieemissionenDialog({ open, onClose, onSubmit
       if (parts.length) {
         contextParts.push(`<photo-metadata>\nThe following metadata was extracted from the photo\'s EXIF data:\n${parts.join('\n')}\n</photo-metadata>`);
       }
-      contextParts.push(`<available-records field="s2_einheit" entity="Konzernstruktur">\n${JSON.stringify(konzernstrukturList.map(r => ({ record_id: r.record_id, ...r.fields })), null, 2)}\n</available-records>`);
       contextParts.push(`<available-records field="s2_berichtsjahr" entity="Berichtsjahr">\n${JSON.stringify(berichtsjahrList.map(r => ({ record_id: r.record_id, ...r.fields })), null, 2)}\n</available-records>`);
       contextParts.push(`<available-records field="s2_emissionsfaktor" entity="Emissionsfaktoren">\n${JSON.stringify(emissionsfaktorenList.map(r => ({ record_id: r.record_id, ...r.fields })), null, 2)}\n</available-records>`);
+      contextParts.push(`<available-records field="s2_einheit" entity="Konzernstruktur">\n${JSON.stringify(konzernstrukturList.map(r => ({ record_id: r.record_id, ...r.fields })), null, 2)}\n</available-records>`);
       if (usePersonalInfo) {
         try {
           const profile = await getUserProfile();
@@ -124,7 +242,7 @@ export function Scope2IndirekteEnergieemissionenDialog({ open, onClose, onSubmit
         }
       }
       const photoContext = contextParts.length ? contextParts.join('\n') : undefined;
-      const schema = `{\n  "s2_einheit": string | null, // Display name from Konzernstruktur (see <available-records>)\n  "s2_berichtsjahr": string | null, // Display name from Berichtsjahr (see <available-records>)\n  "s2_energieart": LookupValue | null, // Energieart (select one key: "strom" | "fernwaerme" | "fernkaelte" | "dampf") mapping: strom=Strom, fernwaerme=Fernwärme, fernkaelte=Fernkälte, dampf=Dampf\n  "s2_berechnungsmethode": LookupValue | null, // Berechnungsmethode (select one key: "marktbasiert" | "standortbasiert" | "beide") mapping: marktbasiert=Marktbasiert, standortbasiert=Standortbasiert, beide=Beide\n  "s2_verbrauch_kwh": number | null, // Verbrauchsmenge (kWh)\n  "s2_emissionsfaktor": string | null, // Display name from Emissionsfaktoren (see <available-records>)\n  "s2_co2e_marktbasiert": number | null, // CO2e-Menge marktbasiert (Tonnen)\n  "s2_co2e_standortbasiert": number | null, // CO2e-Menge standortbasiert (Tonnen)\n  "s2_lieferant": string | null, // Lieferant / Energieversorger\n  "s2_herkunftsnachweis": boolean | null, // Herkunftsnachweis vorhanden (z. B. Grünstromzertifikat)\n  "s2_bemerkungen": string | null, // Bemerkungen\n}`;
+      const schema = `{\n  "s2_berichtsjahr": string | null, // Display name from Berichtsjahr (see <available-records>)\n  "s2_energieart": LookupValue | null, // Energieart (select one key: "strom" | "fernwaerme" | "fernkaelte" | "dampf") mapping: strom=Strom, fernwaerme=Fernwärme, fernkaelte=Fernkälte, dampf=Dampf\n  "s2_berechnungsmethode": LookupValue | null, // Berechnungsmethode (select one key: "marktbasiert" | "standortbasiert" | "beide") mapping: marktbasiert=Marktbasiert, standortbasiert=Standortbasiert, beide=Beide\n  "s2_verbrauch_kwh": number | null, // Verbrauchsmenge (kWh)\n  "s2_emissionsfaktor": string | null, // Display name from Emissionsfaktoren (see <available-records>)\n  "s2_co2e_marktbasiert": number | null, // CO2e-Menge marktbasiert (Tonnen)\n  "s2_co2e_standortbasiert": number | null, // CO2e-Menge standortbasiert (Tonnen)\n  "s2_lieferant": string | null, // Lieferant / Energieversorger\n  "s2_herkunftsnachweis": boolean | null, // Herkunftsnachweis vorhanden (z. B. Grünstromzertifikat)\n  "s2_bemerkungen": string | null, // Bemerkungen\n  "s2_einheit": string | null, // Display name from Konzernstruktur (see <available-records>)\n}`;
       const raw = await extractFromInput<Record<string, unknown>>(schema, {
         dataUri: uri,
         userText: aiText.trim() || undefined,
@@ -137,15 +255,10 @@ export function Scope2IndirekteEnergieemissionenDialog({ open, onClose, onSubmit
           const n = name.toLowerCase().trim();
           return candidates.some(c => c.toLowerCase().includes(n) || n.includes(c.toLowerCase()));
         }
-        const applookupKeys = new Set<string>(["s2_einheit", "s2_berichtsjahr", "s2_emissionsfaktor"]);
+        const applookupKeys = new Set<string>(["s2_berichtsjahr", "s2_emissionsfaktor", "s2_einheit"]);
         for (const [k, v] of Object.entries(raw)) {
           if (applookupKeys.has(k)) continue;
           if (v != null) merged[k] = v;
-        }
-        const s2_einheitName = raw['s2_einheit'] as string | null;
-        if (s2_einheitName) {
-          const s2_einheitMatch = konzernstrukturList.find(r => matchName(s2_einheitName!, [String(r.fields.einheit_name ?? '')]));
-          if (s2_einheitMatch) merged['s2_einheit'] = createRecordUrl(APP_IDS.KONZERNSTRUKTUR, s2_einheitMatch.record_id);
         }
         const s2_berichtsjahrName = raw['s2_berichtsjahr'] as string | null;
         if (s2_berichtsjahrName) {
@@ -156,6 +269,11 @@ export function Scope2IndirekteEnergieemissionenDialog({ open, onClose, onSubmit
         if (s2_emissionsfaktorName) {
           const s2_emissionsfaktorMatch = emissionsfaktorenList.find(r => matchName(s2_emissionsfaktorName!, [String(r.fields.ef_bezeichnung ?? '')]));
           if (s2_emissionsfaktorMatch) merged['s2_emissionsfaktor'] = createRecordUrl(APP_IDS.EMISSIONSFAKTOREN, s2_emissionsfaktorMatch.record_id);
+        }
+        const s2_einheitName = raw['s2_einheit'] as string | null;
+        if (s2_einheitName) {
+          const s2_einheitMatch = konzernstrukturList.find(r => matchName(s2_einheitName!, [String(r.fields.einheit_name ?? '')]));
+          if (s2_einheitMatch) merged['s2_einheit'] = createRecordUrl(APP_IDS.KONZERNSTRUKTUR, s2_einheitMatch.record_id);
         }
         return merged as Partial<Scope2IndirekteEnergieemissionen['fields']>;
       });
@@ -210,22 +328,418 @@ export function Scope2IndirekteEnergieemissionenDialog({ open, onClose, onSubmit
 
   const DIALOG_INTENT = defaultValues ? 'Scope 2 – Indirekte Energieemissionen bearbeiten' : 'Scope 2 – Indirekte Energieemissionen hinzufügen';
 
-  return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{DIALOG_INTENT}</DialogTitle>
-        </DialogHeader>
-
-        {enablePhotoScan && (
-          <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-            <div>
-              <div className="flex items-center gap-1.5 font-medium">
-                <IconSparkles className="h-4 w-4 text-primary" />
-                KI-Assistent
+  const fieldBlocks: Record<string, React.ReactNode> = {
+    's2_berichtsjahr': (
+      <div key="s2_berichtsjahr" className="space-y-1.5">
+        <Label htmlFor="s2_berichtsjahr">Berichtsjahr</Label>
+        <Combobox
+          id="s2_berichtsjahr"
+          placeholder=""
+          items={berichtsjahrListAll.map(r => ({
+            id: r.record_id,
+            label: String(r.fields.anmerkungen_jahr ?? r.record_id),
+          }))}
+          value={extractRecordId(fields.s2_berichtsjahr)}
+          onChange={id => setFields(f => ({ ...f, s2_berichtsjahr: id ? createRecordUrl(APP_IDS.BERICHTSJAHR, id) : undefined }))}
+          searchPlaceholder="Suchen…"
+          emptyText="Kein Treffer"
+          onCreateNew={(q) => openCreateBerichtsjahr("s2_berichtsjahr", q)}
+          createLabel="Neu in Berichtsjahr"
+        />
+      </div>
+    ),
+    's2_energieart': (
+      <div key="s2_energieart" className="space-y-1.5">
+        <Label htmlFor="s2_energieart">Energieart</Label>
+        <div role="radiogroup" className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.s2_energieart) === 'strom'}
+            onClick={() => setFields(f => ({ ...f, s2_energieart: (lookupKey(f.s2_energieart) === 'strom' ? undefined : 'strom') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.s2_energieart) === 'strom'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Strom
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.s2_energieart) === 'fernwaerme'}
+            onClick={() => setFields(f => ({ ...f, s2_energieart: (lookupKey(f.s2_energieart) === 'fernwaerme' ? undefined : 'fernwaerme') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.s2_energieart) === 'fernwaerme'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Fernwärme
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.s2_energieart) === 'fernkaelte'}
+            onClick={() => setFields(f => ({ ...f, s2_energieart: (lookupKey(f.s2_energieart) === 'fernkaelte' ? undefined : 'fernkaelte') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.s2_energieart) === 'fernkaelte'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Fernkälte
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.s2_energieart) === 'dampf'}
+            onClick={() => setFields(f => ({ ...f, s2_energieart: (lookupKey(f.s2_energieart) === 'dampf' ? undefined : 'dampf') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.s2_energieart) === 'dampf'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Dampf
+          </button>
+        </div>
+      </div>
+    ),
+    's2_berechnungsmethode': (
+      <div key="s2_berechnungsmethode" className="space-y-1.5">
+        <Label htmlFor="s2_berechnungsmethode">Berechnungsmethode</Label>
+        <div role="radiogroup" className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.s2_berechnungsmethode) === 'marktbasiert'}
+            onClick={() => setFields(f => ({ ...f, s2_berechnungsmethode: (lookupKey(f.s2_berechnungsmethode) === 'marktbasiert' ? undefined : 'marktbasiert') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.s2_berechnungsmethode) === 'marktbasiert'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Marktbasiert
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.s2_berechnungsmethode) === 'standortbasiert'}
+            onClick={() => setFields(f => ({ ...f, s2_berechnungsmethode: (lookupKey(f.s2_berechnungsmethode) === 'standortbasiert' ? undefined : 'standortbasiert') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.s2_berechnungsmethode) === 'standortbasiert'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Standortbasiert
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.s2_berechnungsmethode) === 'beide'}
+            onClick={() => setFields(f => ({ ...f, s2_berechnungsmethode: (lookupKey(f.s2_berechnungsmethode) === 'beide' ? undefined : 'beide') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.s2_berechnungsmethode) === 'beide'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Beide
+          </button>
+        </div>
+      </div>
+    ),
+    's2_verbrauch_kwh': (
+      <div key="s2_verbrauch_kwh" className="space-y-1.5">
+        <Label htmlFor="s2_verbrauch_kwh">Verbrauchsmenge (kWh)</Label>
+        <Input
+          id="s2_verbrauch_kwh"
+          type="number"
+          step="any"
+          {...numberInputProps(formEnhancements, 's2_verbrauch_kwh')}
+          placeholder=""
+          value={fields.s2_verbrauch_kwh !== undefined ? fields.s2_verbrauch_kwh : (computedValues['s2_verbrauch_kwh'] ?? '')}
+          onChange={e => setFields(f => ({ ...f, s2_verbrauch_kwh: clampNumberValue(formEnhancements, 's2_verbrauch_kwh', e.target.value) }))}
+        />
+      </div>
+    ),
+    's2_emissionsfaktor': (
+      <div key="s2_emissionsfaktor" className="space-y-1.5">
+        <Label htmlFor="s2_emissionsfaktor">Emissionsfaktor</Label>
+        <Combobox
+          id="s2_emissionsfaktor"
+          placeholder=""
+          items={emissionsfaktorenListAll.map(r => ({
+            id: r.record_id,
+            label: String(r.fields.ef_bezeichnung ?? r.record_id),
+          }))}
+          value={extractRecordId(fields.s2_emissionsfaktor)}
+          onChange={id => setFields(f => ({ ...f, s2_emissionsfaktor: id ? createRecordUrl(APP_IDS.EMISSIONSFAKTOREN, id) : undefined }))}
+          searchPlaceholder="Suchen…"
+          emptyText="Kein Treffer"
+          onCreateNew={(q) => openCreateEmissionsfaktoren("s2_emissionsfaktor", q)}
+          createLabel="Neu in Emissionsfaktoren"
+        />
+      </div>
+    ),
+    's2_co2e_marktbasiert': (
+      <div key="s2_co2e_marktbasiert" className="space-y-1.5">
+        <Label htmlFor="s2_co2e_marktbasiert">CO2e-Menge marktbasiert (Tonnen)</Label>
+        <Input
+          id="s2_co2e_marktbasiert"
+          type="number"
+          step="any"
+          {...numberInputProps(formEnhancements, 's2_co2e_marktbasiert')}
+          placeholder=""
+          value={fields.s2_co2e_marktbasiert !== undefined ? fields.s2_co2e_marktbasiert : (computedValues['s2_co2e_marktbasiert'] ?? '')}
+          onChange={e => setFields(f => ({ ...f, s2_co2e_marktbasiert: clampNumberValue(formEnhancements, 's2_co2e_marktbasiert', e.target.value) }))}
+        />
+      </div>
+    ),
+    's2_co2e_standortbasiert': (
+      <div key="s2_co2e_standortbasiert" className="space-y-1.5">
+        <Label htmlFor="s2_co2e_standortbasiert">CO2e-Menge standortbasiert (Tonnen)</Label>
+        <Input
+          id="s2_co2e_standortbasiert"
+          type="number"
+          step="any"
+          {...numberInputProps(formEnhancements, 's2_co2e_standortbasiert')}
+          placeholder=""
+          value={fields.s2_co2e_standortbasiert !== undefined ? fields.s2_co2e_standortbasiert : (computedValues['s2_co2e_standortbasiert'] ?? '')}
+          onChange={e => setFields(f => ({ ...f, s2_co2e_standortbasiert: clampNumberValue(formEnhancements, 's2_co2e_standortbasiert', e.target.value) }))}
+        />
+      </div>
+    ),
+    's2_lieferant': (
+      <div key="s2_lieferant" className="space-y-1.5">
+        <Label htmlFor="s2_lieferant">Lieferant / Energieversorger</Label>
+        <Input
+          id="s2_lieferant"
+          placeholder=""
+          value={fields.s2_lieferant ?? ''}
+          onChange={e => setFields(f => ({ ...f, s2_lieferant: e.target.value }))}
+        />
+      </div>
+    ),
+    's2_herkunftsnachweis': (
+      <div key="s2_herkunftsnachweis" className="space-y-1.5">
+        <Label htmlFor="s2_herkunftsnachweis">Herkunftsnachweis vorhanden (z. B. Grünstromzertifikat)</Label>
+        <div className="flex items-center gap-2 pt-1">
+          <Checkbox
+            id="s2_herkunftsnachweis"
+            checked={!!fields.s2_herkunftsnachweis}
+            onCheckedChange={(v) => setFields(f => ({ ...f, s2_herkunftsnachweis: !!v }))}
+          />
+          <Label htmlFor="s2_herkunftsnachweis" className="font-normal">Herkunftsnachweis vorhanden (z. B. Grünstromzertifikat)</Label>
+        </div>
+      </div>
+    ),
+    's2_bemerkungen': (
+      <div key="s2_bemerkungen" className="space-y-1.5">
+        <Label htmlFor="s2_bemerkungen">Bemerkungen</Label>
+        <Textarea
+          id="s2_bemerkungen"
+          placeholder=""
+          value={fields.s2_bemerkungen ?? ''}
+          onChange={e => setFields(f => ({ ...f, s2_bemerkungen: e.target.value }))}
+          rows={3}
+        />
+      </div>
+    ),
+    's2_nachweis': (
+      <div key="s2_nachweis" className="space-y-1.5">
+        <Label htmlFor="s2_nachweis">Nachweis / Beleg (Datei-Upload)</Label>
+        {fields.s2_nachweis ? (
+          <div className="flex items-center gap-3 rounded-lg border p-2">
+            <div className="relative h-14 w-14 shrink-0 rounded-md bg-muted overflow-hidden">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <IconFileText size={20} className="text-muted-foreground" />
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5">Versteht Fotos, Dokumente und Text und füllt alles für dich aus</p>
+              <img
+                src={fields.s2_nachweis}
+                alt=""
+                className="relative h-full w-full object-cover"
+                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
             </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm truncate text-foreground">{fields.s2_nachweis.split("/").pop()}</p>
+              <div className="flex gap-2 mt-1">
+                <label
+                  className="text-xs text-primary hover:underline cursor-pointer"
+                >
+                  Ändern
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const fileUrl = await uploadFile(file, file.name);
+                        setFields(f => ({ ...f, s2_nachweis: fileUrl }));
+                      } catch (err) { console.error('Upload failed:', err); }
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => setFields(f => ({ ...f, s2_nachweis: undefined }))}
+                >
+                  Entfernen
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <label
+            className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-muted-foreground/25 p-4 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
+          >
+            <IconUpload size={20} className="text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Datei hochladen</span>
+            <input
+              type="file"
+              accept="image/*,.pdf"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const fileUrl = await uploadFile(file, file.name);
+                  setFields(f => ({ ...f, s2_nachweis: fileUrl }));
+                } catch (err) { console.error('Upload failed:', err); }
+              }}
+            />
+          </label>
+        )}
+      </div>
+    ),
+    's2_einheit': (
+      <div key="s2_einheit" className="space-y-1.5">
+        <Label htmlFor="s2_einheit">Organisationseinheit</Label>
+        <Combobox
+          id="s2_einheit"
+          placeholder=""
+          items={konzernstrukturListAll.map(r => ({
+            id: r.record_id,
+            label: String(r.fields.einheit_name ?? r.record_id),
+          }))}
+          value={extractRecordId(fields.s2_einheit)}
+          onChange={id => setFields(f => ({ ...f, s2_einheit: id ? createRecordUrl(APP_IDS.KONZERNSTRUKTUR, id) : undefined }))}
+          searchPlaceholder="Suchen…"
+          emptyText="Kein Treffer"
+          onCreateNew={(q) => openCreateKonzernstruktur("s2_einheit", q)}
+          createLabel="Neu in Konzernstruktur"
+        />
+      </div>
+    ),
+  };
+  const orderedFields = applyFieldOrder(Object.keys(fieldBlocks), formEnhancements.fieldOrder);
+  const orderedFieldsKey = orderedFields.map((it) => typeof it === 'string' ? it : it.row.join('+')).join(',');
+
+  // Render-Modell für Computed-Felder:
+  //
+  //   • BACKEND-FELDER mit computed-Eintrag (z.B. gesamtpreis bei einer
+  //     Katzenpension) bleiben als normales Eingabe-Feld stehen. Der Number-
+  //     Input nutzt den computed-Wert als Vorschlag, der User kann jederzeit
+  //     überschreiben (clearing → restore computed).
+  //   • VIRTUELLE computed-Keys (Eintrag in formEnhancements.computed, ABER
+  //     kein passendes Backend-Feld in orderedFields) erscheinen NICHT als
+  //     Input, sondern unten als kompakte 'Berechnungen'-Übersicht oder als
+  //     Inline-Hint unter dem letzten beitragenden Input.
+  const FIELD_LABELS: Record<string, string> = {"s2_berichtsjahr": "Berichtsjahr", "s2_energieart": "Energieart", "s2_berechnungsmethode": "Berechnungsmethode", "s2_verbrauch_kwh": "Verbrauchsmenge (kWh)", "s2_emissionsfaktor": "Emissionsfaktor", "s2_co2e_marktbasiert": "CO2e-Menge marktbasiert (Tonnen)", "s2_co2e_standortbasiert": "CO2e-Menge standortbasiert (Tonnen)", "s2_lieferant": "Lieferant / Energieversorger", "s2_herkunftsnachweis": "Herkunftsnachweis vorhanden (z. B. Grünstromzertifikat)", "s2_bemerkungen": "Bemerkungen", "s2_nachweis": "Nachweis / Beleg (Datei-Upload)", "s2_einheit": "Organisationseinheit"};
+  const CURRENCY_KEYS = new Set<string>([]);
+  // Applookup-Referenz-Labels: pro applookup-Feld in dieser Form (ownKey)
+  // eine Map { lookupKey: label } für ALLE Felder des Target-Schemas. Wird
+  // beim Render-Walk gefiltert auf die in der computed-Formel tatsächlich
+  // referenzierten lookupKeys (siehe applookupRefs unten).
+  const APPLOOKUP_LABELS: Record<string, Record<string, string>> = {"s2_berichtsjahr": {"jahr": "Berichtsjahr", "startdatum": "Startdatum", "enddatum": "Enddatum", "ist_basisjahr": "Ist Basisjahr", "status_jahr": "Status", "anmerkungen_jahr": "Anmerkungen zum Berichtsjahr"}, "s2_emissionsfaktor": {"ef_bezeichnung": "Bezeichnung", "ef_scope": "Scope-Zuordnung", "ef_kategorie": "Kategorie", "ef_energietraeger": "Energieträger / Aktivität", "ef_einheit": "Einheit", "ef_faktor": "Emissionsfaktor (kg CO2e pro Einheit)", "ef_treibhausgas": "Treibhausgase", "ef_quelle": "Quelle / Referenz", "ef_gueltigkeitsjahr": "Gültigkeitsjahr"}, "s2_einheit": {"einheit_name": "Name der Einheit", "einheit_typ": "Typ der Einheit", "uebergeordnete_einheit": "Übergeordnete Einheit (Name)", "land": "Land", "branche": "Branche", "konsolidierungsmethode": "Konsolidierungsmethode", "verantwortlich_vorname": "Vorname der verantwortlichen Person", "verantwortlich_nachname": "Nachname der verantwortlichen Person", "verantwortlich_email": "E-Mail der verantwortlichen Person", "anmerkungen_einheit": "Anmerkungen"}};
+  const inputFields = useMemo(() => flattenFieldOrder(orderedFields), [orderedFieldsKey]);
+  const backendFieldSet = useMemo(() => new Set(inputFields), [inputFields.join(',')]);
+  const virtualComputed = useMemo(
+    () => Object.fromEntries(
+      Object.entries(formEnhancements.computed).filter(([k]) => !backendFieldSet.has(k)),
+    ),
+    [backendFieldSet],
+  );
+  const virtualFormEnhancements = useMemo(
+    () => ({ ...formEnhancements, computed: virtualComputed }),
+    [virtualComputed],
+  );
+  const computedLayout = useMemo(
+    () => classifyComputed(virtualFormEnhancements, inputFields, computedDeps),
+    [virtualFormEnhancements, inputFields.join(',')],
+  );
+  // Applookup-Referenzen: pro ownKey (Lookup-Feld im Form) die Liste der
+  // lookupKeys, die in irgendeiner computed-Formel referenziert werden.
+  // MODUS-1: aus dem Spec-Tree extrahiert. MODUS-2: aus dem Build-Time-
+  // Export computedApplookupRefs (parse-formulas hat Regex-Pairs gesammelt).
+  // Pro (ownKey, lookupKey)-Paar nur einmal; pro ownKey können aber mehrere
+  // lookupKeys gleichzeitig auftauchen (z.B. einzelpreis UND karten10_preis
+  // beim Yoga-Kurs), und alle werden separat als Inline-Hint gerendert.
+  const applookupRefs = useMemo(
+    () => mergeApplookupRefs(
+      extractApplookupRefs(formEnhancements.computed),
+      computedApplookupRefs,
+    ),
+    [],
+  );
+  function summaryLabel(k: string): string {
+    if (FIELD_LABELS[k]) return FIELD_LABELS[k];
+    // Leading underscore(s) als Virtual-Marker abstreifen; Unterstriche zu
+    // Leerzeichen, jedes Wort kapitalisieren. Umlaute kommen vom Sub-Agent
+    // direkt im Key (z. B. `_buchung_dauer_nächte`) — JS/TS/Vite unterstützen
+    // Unicode-Identifier nativ, daher keine ASCII-Transliteration nötig.
+    return k.replace(/^_+/, '')
+      .split('_')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+  }
+  function formatSummaryValue(k: string, v: unknown): string {
+    if (v === undefined || v === null || v === '' || (typeof v === 'number' && !Number.isFinite(v))) return '—';
+    const n = typeof v === 'number' ? v : Number(v);
+    if (!Number.isFinite(n)) return String(v);
+    // Backend-Feld mit €-Label ODER virtueller Computed-Key, dessen Name nach Geld aussieht.
+    const looksLikeCurrency = CURRENCY_KEYS.has(k) || /(?:kosten|preis|betrag|gesamt|netto|brutto|summe|mwst|rabatt|anzahlung|umsatz|saldo)/i.test(k);
+    if (looksLikeCurrency) {
+      return n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    return n.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+  }
+
+  return (
+    <>
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[92vh] flex flex-col overflow-hidden p-0 gap-0">
+        <DialogHeader className="px-6 pt-5 pb-3 border-b flex flex-row items-center gap-3 space-y-0">
+          <DialogTitle className="flex-1 truncate text-left">{DIALOG_INTENT}</DialogTitle>
+          {enablePhotoScan && (
+            <button
+              type="button"
+              onClick={() => setAiOpen(o => !o)}
+              aria-expanded={aiOpen}
+              aria-controls="ai-fill-panel"
+              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all mr-7 shadow-sm ${
+                aiOpen
+                  ? 'bg-primary text-primary-foreground ring-2 ring-primary/30'
+                  : 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/15 hover:border-primary/50'
+              }`}
+            >
+              <IconSparkles className={`h-3.5 w-3.5 ${aiOpen ? '' : 'text-primary'}`} />
+              <span className="hidden sm:inline">KI-Ausfüllen</span>
+              <IconChevronDown className={`h-3 w-3 transition-transform ${aiOpen ? 'rotate-180' : ''}`} />
+            </button>
+          )}
+        </DialogHeader>
+        {enablePhotoScan && aiOpen && (
+          <div id="ai-fill-panel" className="border-b bg-muted/20 px-6 py-4 space-y-3">
+            <p className="text-xs text-muted-foreground">Versteht Fotos, Dokumente und Text und füllt alles für dich aus</p>
             <div className="flex items-start gap-2 pl-0.5">
               <Checkbox
                 id="ai-use-personal-info"
@@ -390,226 +904,170 @@ export function Scope2IndirekteEnergieemissionenDialog({ open, onClose, onSubmit
                 <IconSparkles className="h-3.5 w-3.5 mr-1.5" />Analysieren
               </Button>
             )}
-            <div className="flex justify-center pt-1">
-              <IconArrowBigDownLinesFilled className="h-8 w-8 text-muted-foreground/30" />
-            </div>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="s2_einheit">Organisationseinheit</Label>
-            <Select
-              value={extractRecordId(fields.s2_einheit) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, s2_einheit: v === 'none' ? undefined : createRecordUrl(APP_IDS.KONZERNSTRUKTUR, v) }))}
-            >
-              <SelectTrigger id="s2_einheit"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                {konzernstrukturList.map(r => (
-                  <SelectItem key={r.record_id} value={r.record_id}>
-                    {r.fields.einheit_name ?? r.record_id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="s2_berichtsjahr">Berichtsjahr</Label>
-            <Select
-              value={extractRecordId(fields.s2_berichtsjahr) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, s2_berichtsjahr: v === 'none' ? undefined : createRecordUrl(APP_IDS.BERICHTSJAHR, v) }))}
-            >
-              <SelectTrigger id="s2_berichtsjahr"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                {berichtsjahrList.map(r => (
-                  <SelectItem key={r.record_id} value={r.record_id}>
-                    {r.fields.anmerkungen_jahr ?? r.record_id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="s2_energieart">Energieart</Label>
-            <Select
-              value={lookupKey(fields.s2_energieart) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, s2_energieart: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="s2_energieart"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="strom">Strom</SelectItem>
-                <SelectItem value="fernwaerme">Fernwärme</SelectItem>
-                <SelectItem value="fernkaelte">Fernkälte</SelectItem>
-                <SelectItem value="dampf">Dampf</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="s2_berechnungsmethode">Berechnungsmethode</Label>
-            <Select
-              value={lookupKey(fields.s2_berechnungsmethode) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, s2_berechnungsmethode: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="s2_berechnungsmethode"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="marktbasiert">Marktbasiert</SelectItem>
-                <SelectItem value="standortbasiert">Standortbasiert</SelectItem>
-                <SelectItem value="beide">Beide</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="s2_verbrauch_kwh">Verbrauchsmenge (kWh)</Label>
-            <Input
-              id="s2_verbrauch_kwh"
-              type="number"
-              value={fields.s2_verbrauch_kwh ?? ''}
-              onChange={e => setFields(f => ({ ...f, s2_verbrauch_kwh: e.target.value ? Number(e.target.value) : undefined }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="s2_emissionsfaktor">Emissionsfaktor</Label>
-            <Select
-              value={extractRecordId(fields.s2_emissionsfaktor) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, s2_emissionsfaktor: v === 'none' ? undefined : createRecordUrl(APP_IDS.EMISSIONSFAKTOREN, v) }))}
-            >
-              <SelectTrigger id="s2_emissionsfaktor"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                {emissionsfaktorenList.map(r => (
-                  <SelectItem key={r.record_id} value={r.record_id}>
-                    {r.fields.ef_bezeichnung ?? r.record_id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="s2_co2e_marktbasiert">CO2e-Menge marktbasiert (Tonnen)</Label>
-            <Input
-              id="s2_co2e_marktbasiert"
-              type="number"
-              value={fields.s2_co2e_marktbasiert ?? ''}
-              onChange={e => setFields(f => ({ ...f, s2_co2e_marktbasiert: e.target.value ? Number(e.target.value) : undefined }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="s2_co2e_standortbasiert">CO2e-Menge standortbasiert (Tonnen)</Label>
-            <Input
-              id="s2_co2e_standortbasiert"
-              type="number"
-              value={fields.s2_co2e_standortbasiert ?? ''}
-              onChange={e => setFields(f => ({ ...f, s2_co2e_standortbasiert: e.target.value ? Number(e.target.value) : undefined }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="s2_lieferant">Lieferant / Energieversorger</Label>
-            <Input
-              id="s2_lieferant"
-              value={fields.s2_lieferant ?? ''}
-              onChange={e => setFields(f => ({ ...f, s2_lieferant: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="s2_herkunftsnachweis">Herkunftsnachweis vorhanden (z. B. Grünstromzertifikat)</Label>
-            <div className="flex items-center gap-2 pt-1">
-              <Checkbox
-                id="s2_herkunftsnachweis"
-                checked={!!fields.s2_herkunftsnachweis}
-                onCheckedChange={(v) => setFields(f => ({ ...f, s2_herkunftsnachweis: !!v }))}
-              />
-              <Label htmlFor="s2_herkunftsnachweis" className="font-normal">Herkunftsnachweis vorhanden (z. B. Grünstromzertifikat)</Label>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="s2_bemerkungen">Bemerkungen</Label>
-            <Textarea
-              id="s2_bemerkungen"
-              value={fields.s2_bemerkungen ?? ''}
-              onChange={e => setFields(f => ({ ...f, s2_bemerkungen: e.target.value }))}
-              rows={3}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="s2_nachweis">Nachweis / Beleg (Datei-Upload)</Label>
-            {fields.s2_nachweis ? (
-              <div className="flex items-center gap-3 rounded-lg border p-2">
-                <div className="relative h-14 w-14 shrink-0 rounded-md bg-muted overflow-hidden">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <IconFileText size={20} className="text-muted-foreground" />
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0 min-w-0">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 space-y-4 min-w-0">
+            {(() => {
+              const renderField = (k: string) => {
+                const inlineHints = computedLayout.anchors[k] ?? [];
+                const refs = applookupRefs[k] ?? [];
+                return (
+                  <div key={k} className="space-y-1.5 min-w-0">
+                    {fieldBlocks[k]}
+                    {refs.map(({ lookupKey }) => {
+                      // Show the live numeric value the formula will pull from
+                      // the selected lookup target (e.g. "Monatspreis: 34,90 €"
+                      // under the Tarif combobox). Hidden while no lookup is
+                      // selected or the target field is non-numeric.
+                      const v = resolveApplookupRef(k, lookupKey, fields as Record<string, unknown>, computedContext);
+                      if (v === null) return null;
+                      const lbl = APPLOOKUP_LABELS[k]?.[lookupKey] ?? lookupKey;
+                      const text = formatSummaryValue(lookupKey, v);
+                      return (
+                        <div key={`alh-${k}-${lookupKey}`} className="flex items-center gap-1.5 pl-3 text-xs text-muted-foreground">
+                          <span className="text-primary/70">→</span>
+                          <span>{lbl}</span>
+                          <span className="ml-auto font-medium tabular-nums text-foreground">{text}</span>
+                        </div>
+                      );
+                    })}
+                    {inlineHints.map((cKey) => {
+                      const v = computedValues[cKey];
+                      const text = formatSummaryValue(cKey, v);
+                      if (text === '—') return null;
+                      return (
+                        <div key={cKey} className="flex items-center gap-1.5 pl-3 text-xs text-muted-foreground">
+                          <span className="text-primary/70">→</span>
+                          <span>{summaryLabel(cKey)}</span>
+                          <span className="ml-auto font-medium tabular-nums text-foreground">{text}</span>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <img
-                    src={fields.s2_nachweis}
-                    alt=""
-                    className="relative h-full w-full object-cover"
-                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate text-foreground">{fields.s2_nachweis.split("/").pop()}</p>
-                  <div className="flex gap-2 mt-1">
-                    <label
-                      className="text-xs text-primary hover:underline cursor-pointer"
-                    >
-                      Ändern
-                      <input
-                        type="file"
-                        accept="image/*,.pdf"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          try {
-                            const fileUrl = await uploadFile(file, file.name);
-                            setFields(f => ({ ...f, s2_nachweis: fileUrl }));
-                          } catch (err) { console.error('Upload failed:', err); }
-                        }}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="text-xs text-muted-foreground hover:text-destructive"
-                      onClick={() => setFields(f => ({ ...f, s2_nachweis: undefined }))}
-                    >
-                      Entfernen
-                    </button>
+                );
+              };
+              return orderedFields.map((item, idx) => {
+                if (typeof item === 'string') return renderField(item);
+                const cols = item.cols ?? `repeat(${item.row.length}, minmax(0, 1fr))`;
+                return (
+                  <div key={`row-${idx}`} className="grid gap-3" style={{ gridTemplateColumns: cols }}>
+                    {item.row.map(renderField)}
                   </div>
-                </div>
+                );
+              });
+            })()}
+            {(computedLayout.aggregates.length > 0 || computedLayout.finalTotal) && (
+              <div className="mt-6 pt-4 border-t border-border space-y-1.5">
+                {computedLayout.aggregates.length > 0 && (
+                  <dl className="space-y-1.5 pb-2">
+                    {computedLayout.aggregates.map((k) => {
+                      const userVal = (fields as Record<string, unknown>)[k];
+                      const computed = computedValues[k];
+                      const v = userVal !== undefined && userVal !== null && userVal !== '' ? userVal : computed;
+                      return (
+                        <div key={k} className="flex justify-between items-baseline gap-3">
+                          <dt className="text-sm text-muted-foreground truncate">{summaryLabel(k)}</dt>
+                          <dd className="text-sm font-medium tabular-nums whitespace-nowrap">{formatSummaryValue(k, v)}</dd>
+                        </div>
+                      );
+                    })}
+                  </dl>
+                )}
+                {computedLayout.finalTotal && (() => {
+                  const k = computedLayout.finalTotal;
+                  const userVal = (fields as Record<string, unknown>)[k];
+                  const computed = computedValues[k];
+                  const v = userVal !== undefined && userVal !== null && userVal !== '' ? userVal : computed;
+                  // Innere Border nur wenn aggregates existieren — sonst hätten wir
+                  // zwei direkt aufeinanderfolgende Striche (Outer + Inner) mit nur
+                  // einer Aggregat-Zeile dazwischen → zu viel visuelles Rauschen.
+                  const sep = computedLayout.aggregates.length > 0 ? 'pt-3 border-t border-border' : 'pt-1';
+                  return (
+                    <div className={`flex justify-between items-baseline gap-3 ${sep}`}>
+                      <span className="text-base font-semibold text-foreground">{summaryLabel(k)}</span>
+                      <span className="text-lg font-bold tabular-nums whitespace-nowrap text-foreground">{formatSummaryValue(k, v)}</span>
+                    </div>
+                  );
+                })()}
               </div>
-            ) : (
-              <label
-                className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-muted-foreground/25 p-4 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
-              >
-                <IconUpload size={20} className="text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Datei hochladen</span>
-                <input
-                  type="file"
-                  accept="image/*,.pdf"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    try {
-                      const fileUrl = await uploadFile(file, file.name);
-                      setFields(f => ({ ...f, s2_nachweis: fileUrl }));
-                    } catch (err) { console.error('Upload failed:', err); }
-                  }}
-                />
-              </label>
+            )}
+            {recordId && (
+              <div className="pt-2 border-t border-border">
+                <AttachmentsSection appId={APP_IDS["SCOPE_2_–_INDIREKTE_ENERGIEEMISSIONEN"]} recordId={recordId} />
+              </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-            <Button type="submit" disabled={saving}>
+            <Button
+              type="submit"
+              disabled={saving || !isDirty}
+            >
               {saving ? 'Speichern...' : defaultValues ? 'Speichern' : 'Erstellen'}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+    {createBerichtsjahrOpen && (
+      <BerichtsjahrDialog
+        open={createBerichtsjahrOpen}
+        onClose={() => setCreateBerichtsjahrOpen(false)}
+        onSubmit={async (newFields) => {
+          const result = await LivingAppsService.createBerichtsjahrEntry(newFields as any) as { id?: string };
+          if (result?.id) {
+            const newRec = { record_id: result.id, fields: newFields } as unknown as Berichtsjahr;
+            setExtraBerichtsjahr(prev => [...prev, newRec]);
+            const url = createRecordUrl(APP_IDS.BERICHTSJAHR, result.id);
+            setFields(prev => ({ ...prev, [createBerichtsjahrField]: url } as any));
+          }
+          setCreateBerichtsjahrOpen(false);
+        }}
+        defaultValues={createBerichtsjahrInitial
+          ? ({ anmerkungen_jahr: createBerichtsjahrInitial } as any)
+          : undefined}
+      />
+    )}
+    {createEmissionsfaktorenOpen && (
+      <EmissionsfaktorenDialog
+        open={createEmissionsfaktorenOpen}
+        onClose={() => setCreateEmissionsfaktorenOpen(false)}
+        onSubmit={async (newFields) => {
+          const result = await LivingAppsService.createEmissionsfaktorenEntry(newFields as any) as { id?: string };
+          if (result?.id) {
+            const newRec = { record_id: result.id, fields: newFields } as unknown as Emissionsfaktoren;
+            setExtraEmissionsfaktoren(prev => [...prev, newRec]);
+            const url = createRecordUrl(APP_IDS.EMISSIONSFAKTOREN, result.id);
+            setFields(prev => ({ ...prev, [createEmissionsfaktorenField]: url } as any));
+          }
+          setCreateEmissionsfaktorenOpen(false);
+        }}
+        defaultValues={createEmissionsfaktorenInitial
+          ? ({ ef_bezeichnung: createEmissionsfaktorenInitial } as any)
+          : undefined}
+      />
+    )}
+    {createKonzernstrukturOpen && (
+      <KonzernstrukturDialog
+        open={createKonzernstrukturOpen}
+        onClose={() => setCreateKonzernstrukturOpen(false)}
+        onSubmit={async (newFields) => {
+          const result = await LivingAppsService.createKonzernstrukturEntry(newFields as any) as { id?: string };
+          if (result?.id) {
+            const newRec = { record_id: result.id, fields: newFields } as unknown as Konzernstruktur;
+            setExtraKonzernstruktur(prev => [...prev, newRec]);
+            const url = createRecordUrl(APP_IDS.KONZERNSTRUKTUR, result.id);
+            setFields(prev => ({ ...prev, [createKonzernstrukturField]: url } as any));
+          }
+          setCreateKonzernstrukturOpen(false);
+        }}
+        defaultValues={createKonzernstrukturInitial
+          ? ({ einheit_name: createKonzernstrukturInitial } as any)
+          : undefined}
+      />
+    )}
+    </>
   );
 }

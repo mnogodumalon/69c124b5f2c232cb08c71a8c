@@ -3,6 +3,75 @@
 export type LookupValue = { key: string; label: string };
 export type GeoLocation = { lat: number; long: number; info?: string };
 
+export type AttachmentType = 'file' | 'note' | 'url' | 'json';
+export interface Attachment {
+  id: string;
+  type: AttachmentType;
+  label: string | null;
+  value: string | null;
+  active: boolean;
+  createdat?: string | null;
+  updatedat?: string | null;
+}
+
+export interface AttachmentInput {
+  type: AttachmentType;
+  label?: string;
+  value: string;
+  active?: boolean;
+}
+
+export interface Scope3WeitereIndirekteEmissionen {
+  record_id: string;
+  createdat: string;
+  updatedat: string | null;
+  fields: {
+    s3_einheit?: string; // applookup -> URL zu 'Konzernstruktur' Record
+    s3_berichtsjahr?: string; // applookup -> URL zu 'Berichtsjahr' Record
+    s3_kategorie?: LookupValue;
+    s3_aktivitaet?: string;
+    s3_berechnungsmethode?: LookupValue;
+    s3_aktivitaetsmenge?: number;
+    s3_einheit_aktivitaet?: LookupValue;
+    s3_emissionsfaktor?: string; // applookup -> URL zu 'Emissionsfaktoren' Record
+    s3_co2e_menge?: number;
+    s3_datenqualitaet?: LookupValue;
+    s3_bemerkungen?: string;
+    s3_nachweis?: string;
+  };
+}
+
+export interface Emissionsfaktoren {
+  record_id: string;
+  createdat: string;
+  updatedat: string | null;
+  fields: {
+    ef_bezeichnung?: string;
+    ef_scope?: LookupValue;
+    ef_kategorie?: LookupValue;
+    ef_energietraeger?: string;
+    ef_einheit?: LookupValue;
+    ef_faktor?: number;
+    ef_treibhausgas?: LookupValue[];
+    ef_quelle?: string;
+    ef_gueltigkeitsjahr?: number;
+  };
+}
+
+export interface Berichtsjahr {
+  record_id: string;
+  createdat: string;
+  updatedat: string | null;
+  fields: {
+    jahr?: number;
+    startdatum?: string; // Format: YYYY-MM-DD oder ISO String
+    enddatum?: string; // Format: YYYY-MM-DD oder ISO String
+    ist_basisjahr?: boolean;
+    status_jahr?: LookupValue;
+    anmerkungen_jahr?: string;
+  };
+}
+
 export interface Scope1DirekteEmissionen {
   record_id: string;
   createdat: string;
@@ -26,7 +95,6 @@ export interface Scope2IndirekteEnergieemissionen {
   createdat: string;
   updatedat: string | null;
   fields: {
-    s2_einheit?: string; // applookup -> URL zu 'Konzernstruktur' Record
     s2_berichtsjahr?: string; // applookup -> URL zu 'Berichtsjahr' Record
     s2_energieart?: LookupValue;
     s2_berechnungsmethode?: LookupValue;
@@ -38,6 +106,7 @@ export interface Scope2IndirekteEnergieemissionen {
     s2_herkunftsnachweis?: boolean;
     s2_bemerkungen?: string;
     s2_nachweis?: string;
+    s2_einheit?: string; // applookup -> URL zu 'Konzernstruktur' Record
   };
 }
 
@@ -102,70 +171,34 @@ export interface Konzernstruktur {
   };
 }
 
-export interface Scope3WeitereIndirekteEmissionen {
-  record_id: string;
-  createdat: string;
-  updatedat: string | null;
-  fields: {
-    s3_einheit?: string; // applookup -> URL zu 'Konzernstruktur' Record
-    s3_berichtsjahr?: string; // applookup -> URL zu 'Berichtsjahr' Record
-    s3_kategorie?: LookupValue;
-    s3_aktivitaet?: string;
-    s3_berechnungsmethode?: LookupValue;
-    s3_aktivitaetsmenge?: number;
-    s3_einheit_aktivitaet?: LookupValue;
-    s3_emissionsfaktor?: string; // applookup -> URL zu 'Emissionsfaktoren' Record
-    s3_co2e_menge?: number;
-    s3_datenqualitaet?: LookupValue;
-    s3_bemerkungen?: string;
-    s3_nachweis?: string;
-  };
-}
-
-export interface Emissionsfaktoren {
-  record_id: string;
-  createdat: string;
-  updatedat: string | null;
-  fields: {
-    ef_bezeichnung?: string;
-    ef_scope?: LookupValue;
-    ef_kategorie?: LookupValue;
-    ef_energietraeger?: string;
-    ef_einheit?: LookupValue;
-    ef_faktor?: number;
-    ef_treibhausgas?: LookupValue[];
-    ef_quelle?: string;
-    ef_gueltigkeitsjahr?: number;
-  };
-}
-
-export interface Berichtsjahr {
-  record_id: string;
-  createdat: string;
-  updatedat: string | null;
-  fields: {
-    jahr?: number;
-    startdatum?: string; // Format: YYYY-MM-DD oder ISO String
-    enddatum?: string; // Format: YYYY-MM-DD oder ISO String
-    ist_basisjahr?: boolean;
-    status_jahr?: LookupValue;
-    anmerkungen_jahr?: string;
-  };
-}
-
 export const APP_IDS = {
-  'SCOPE_1_–_DIREKTE_EMISSIONEN': '69c1246ff4e0dc2324ed9440',
-  'SCOPE_2_–_INDIREKTE_ENERGIEEMISSIONEN': '69c12470c2204e2aa999bcb8',
+  "SCOPE_3_–_WEITERE_INDIREKTE_EMISSIONEN": '69c12471ef7da5f0b841a1a3',
+  EMISSIONSFAKTOREN: '69c1246ebeed0889fed560e2',
+  BERICHTSJAHR: '69c1246d7299804c440448fa',
+  "SCOPE_1_–_DIREKTE_EMISSIONEN": '69c1246ff4e0dc2324ed9440',
+  "SCOPE_2_–_INDIREKTE_ENERGIEEMISSIONEN": '69c12470c2204e2aa999bcb8',
   EMISSIONEN_SCHNELLEINGABE: '69c124726ff6d54a56c2e81c',
   GHG_BERICHTSUEBERSICHT: '69c124734278d3e6be1ca7c2',
   KONZERNSTRUKTUR: '69c124661ddc6ec52a6c2836',
-  'SCOPE_3_–_WEITERE_INDIREKTE_EMISSIONEN': '69c12471ef7da5f0b841a1a3',
-  EMISSIONSFAKTOREN: '69c1246ebeed0889fed560e2',
-  BERICHTSJAHR: '69c1246d7299804c440448fa',
 } as const;
 
 
 export const LOOKUP_OPTIONS: Record<string, Record<string, {key: string, label: string}[]>> = {
+  'scope_3_–_weitere_indirekte_emissionen': {
+    s3_kategorie: [{ key: "kat1", label: "Kat. 1: Eingekaufte Waren und Dienstleistungen" }, { key: "kat2", label: "Kat. 2: Investitionsgüter" }, { key: "kat3", label: "Kat. 3: Brennstoff- und energiebezogene Aktivitäten" }, { key: "kat4", label: "Kat. 4: Vorgelagerter Transport und Vertrieb" }, { key: "kat5", label: "Kat. 5: Abfälle aus dem Betrieb" }, { key: "kat6", label: "Kat. 6: Geschäftsreisen" }, { key: "kat7", label: "Kat. 7: Pendlerverkehr der Mitarbeitenden" }, { key: "kat8", label: "Kat. 8: Vorgelagerte gemietete Anlagen" }, { key: "kat9", label: "Kat. 9: Nachgelagerter Transport und Vertrieb" }, { key: "kat10", label: "Kat. 10: Verarbeitung verkaufter Produkte" }, { key: "kat11", label: "Kat. 11: Nutzung verkaufter Produkte" }, { key: "kat12", label: "Kat. 12: Entsorgung verkaufter Produkte" }, { key: "kat13", label: "Kat. 13: Nachgelagerte gemietete Anlagen" }, { key: "kat14", label: "Kat. 14: Franchises" }, { key: "kat15", label: "Kat. 15: Investitionen" }],
+    s3_berechnungsmethode: [{ key: "ausgabenbasiert", label: "Ausgabenbasiert" }, { key: "aktivitaetsbasiert", label: "Aktivitätsbasiert" }, { key: "hybrid", label: "Hybridmethode" }, { key: "lieferantenspezifisch", label: "Lieferantenspezifisch" }],
+    s3_einheit_aktivitaet: [{ key: "kwh", label: "kWh" }, { key: "mwh", label: "MWh" }, { key: "liter", label: "Liter" }, { key: "kg", label: "kg" }, { key: "tonne", label: "Tonne" }, { key: "tkm", label: "tkm" }, { key: "pkm", label: "Personenkilometer" }, { key: "eur", label: "EUR" }, { key: "m3", label: "m³" }, { key: "sonstige", label: "Sonstige" }],
+    s3_datenqualitaet: [{ key: "primaer", label: "Primärdaten" }, { key: "sekundaer", label: "Sekundärdaten" }, { key: "schaetzung", label: "Schätzung" }],
+  },
+  'emissionsfaktoren': {
+    ef_scope: [{ key: "scope1", label: "Scope 1" }, { key: "scope2", label: "Scope 2" }, { key: "scope3", label: "Scope 3" }],
+    ef_kategorie: [{ key: "stationaere_verbrennung", label: "Stationäre Verbrennung" }, { key: "mobile_verbrennung", label: "Mobile Verbrennung" }, { key: "prozessemissionen", label: "Prozessemissionen" }, { key: "fluechtige_emissionen", label: "Flüchtige Emissionen" }, { key: "strom", label: "Eingekaufter Strom" }, { key: "waerme", label: "Eingekaufte Wärme" }, { key: "kaelte", label: "Eingekaufte Kälte" }, { key: "dampf", label: "Eingekaufter Dampf" }, { key: "vorgelagert", label: "Vorgelagerte Emissionen" }, { key: "nachgelagert", label: "Nachgelagerte Emissionen" }, { key: "sonstige", label: "Sonstige" }],
+    ef_einheit: [{ key: "kwh", label: "kWh" }, { key: "mwh", label: "MWh" }, { key: "gj", label: "GJ" }, { key: "liter", label: "Liter" }, { key: "kg", label: "kg" }, { key: "tonne", label: "Tonne" }, { key: "m3", label: "m³" }, { key: "tkm", label: "tkm" }, { key: "pkm", label: "Personenkilometer" }, { key: "eur", label: "EUR" }, { key: "sonstige", label: "Sonstige" }],
+    ef_treibhausgas: [{ key: "co2", label: "CO2" }, { key: "ch4", label: "CH4" }, { key: "n2o", label: "N2O" }, { key: "hfc", label: "HFC" }, { key: "pfc", label: "PFC" }, { key: "sf6", label: "SF6" }, { key: "nf3", label: "NF3" }],
+  },
+  'berichtsjahr': {
+    status_jahr: [{ key: "offen", label: "Offen" }, { key: "geschlossen", label: "Geschlossen" }, { key: "archiviert", label: "Archiviert" }],
+  },
   'scope_1_–_direkte_emissionen': {
     s1_unterkategorie: [{ key: "stationaere_verbrennung", label: "Stationäre Verbrennung" }, { key: "mobile_verbrennung", label: "Mobile Verbrennung" }, { key: "prozessemissionen", label: "Prozessemissionen" }, { key: "fluechtige_emissionen", label: "Flüchtige Emissionen" }],
     s1_einheit_verbrauch: [{ key: "kwh", label: "kWh" }, { key: "mwh", label: "MWh" }, { key: "gj", label: "GJ" }, { key: "liter", label: "Liter" }, { key: "kg", label: "kg" }, { key: "tonne", label: "Tonne" }, { key: "m3", label: "m³" }, { key: "sonstige", label: "Sonstige" }],
@@ -189,24 +222,42 @@ export const LOOKUP_OPTIONS: Record<string, Record<string, {key: string, label: 
     branche: [{ key: "industrie", label: "Industrie & Fertigung" }, { key: "energie", label: "Energie & Versorgung" }, { key: "handel", label: "Handel & Logistik" }, { key: "dienstleistungen", label: "Dienstleistungen" }, { key: "bauwesen", label: "Bauwesen" }, { key: "landwirtschaft", label: "Landwirtschaft" }, { key: "it", label: "IT & Technologie" }, { key: "gesundheit", label: "Gesundheitswesen" }, { key: "sonstige", label: "Sonstige" }],
     konsolidierungsmethode: [{ key: "operationale_kontrolle", label: "Operationale Kontrolle" }, { key: "finanzielle_kontrolle", label: "Finanzielle Kontrolle" }, { key: "equity_anteil", label: "Equity-Anteil" }],
   },
-  'scope_3_–_weitere_indirekte_emissionen': {
-    s3_kategorie: [{ key: "kat1", label: "Kat. 1: Eingekaufte Waren und Dienstleistungen" }, { key: "kat2", label: "Kat. 2: Investitionsgüter" }, { key: "kat3", label: "Kat. 3: Brennstoff- und energiebezogene Aktivitäten" }, { key: "kat4", label: "Kat. 4: Vorgelagerter Transport und Vertrieb" }, { key: "kat5", label: "Kat. 5: Abfälle aus dem Betrieb" }, { key: "kat6", label: "Kat. 6: Geschäftsreisen" }, { key: "kat7", label: "Kat. 7: Pendlerverkehr der Mitarbeitenden" }, { key: "kat8", label: "Kat. 8: Vorgelagerte gemietete Anlagen" }, { key: "kat9", label: "Kat. 9: Nachgelagerter Transport und Vertrieb" }, { key: "kat10", label: "Kat. 10: Verarbeitung verkaufter Produkte" }, { key: "kat11", label: "Kat. 11: Nutzung verkaufter Produkte" }, { key: "kat12", label: "Kat. 12: Entsorgung verkaufter Produkte" }, { key: "kat13", label: "Kat. 13: Nachgelagerte gemietete Anlagen" }, { key: "kat14", label: "Kat. 14: Franchises" }, { key: "kat15", label: "Kat. 15: Investitionen" }],
-    s3_berechnungsmethode: [{ key: "ausgabenbasiert", label: "Ausgabenbasiert" }, { key: "aktivitaetsbasiert", label: "Aktivitätsbasiert" }, { key: "hybrid", label: "Hybridmethode" }, { key: "lieferantenspezifisch", label: "Lieferantenspezifisch" }],
-    s3_einheit_aktivitaet: [{ key: "kwh", label: "kWh" }, { key: "mwh", label: "MWh" }, { key: "liter", label: "Liter" }, { key: "kg", label: "kg" }, { key: "tonne", label: "Tonne" }, { key: "tkm", label: "tkm" }, { key: "pkm", label: "Personenkilometer" }, { key: "eur", label: "EUR" }, { key: "m3", label: "m³" }, { key: "sonstige", label: "Sonstige" }],
-    s3_datenqualitaet: [{ key: "primaer", label: "Primärdaten" }, { key: "sekundaer", label: "Sekundärdaten" }, { key: "schaetzung", label: "Schätzung" }],
-  },
-  'emissionsfaktoren': {
-    ef_scope: [{ key: "scope1", label: "Scope 1" }, { key: "scope2", label: "Scope 2" }, { key: "scope3", label: "Scope 3" }],
-    ef_kategorie: [{ key: "stationaere_verbrennung", label: "Stationäre Verbrennung" }, { key: "mobile_verbrennung", label: "Mobile Verbrennung" }, { key: "prozessemissionen", label: "Prozessemissionen" }, { key: "fluechtige_emissionen", label: "Flüchtige Emissionen" }, { key: "strom", label: "Eingekaufter Strom" }, { key: "waerme", label: "Eingekaufte Wärme" }, { key: "kaelte", label: "Eingekaufte Kälte" }, { key: "dampf", label: "Eingekaufter Dampf" }, { key: "vorgelagert", label: "Vorgelagerte Emissionen" }, { key: "nachgelagert", label: "Nachgelagerte Emissionen" }, { key: "sonstige", label: "Sonstige" }],
-    ef_einheit: [{ key: "kwh", label: "kWh" }, { key: "mwh", label: "MWh" }, { key: "gj", label: "GJ" }, { key: "liter", label: "Liter" }, { key: "kg", label: "kg" }, { key: "tonne", label: "Tonne" }, { key: "m3", label: "m³" }, { key: "tkm", label: "tkm" }, { key: "pkm", label: "Personenkilometer" }, { key: "eur", label: "EUR" }, { key: "sonstige", label: "Sonstige" }],
-    ef_treibhausgas: [{ key: "co2", label: "CO2" }, { key: "ch4", label: "CH4" }, { key: "n2o", label: "N2O" }, { key: "hfc", label: "HFC" }, { key: "pfc", label: "PFC" }, { key: "sf6", label: "SF6" }, { key: "nf3", label: "NF3" }],
-  },
-  'berichtsjahr': {
-    status_jahr: [{ key: "geschlossen", label: "Geschlossen" }, { key: "archiviert", label: "Archiviert" }, { key: "offen", label: "Offen" }],
-  },
 };
 
 export const FIELD_TYPES: Record<string, Record<string, string>> = {
+  'scope_3_–_weitere_indirekte_emissionen': {
+    's3_einheit': 'applookup/select',
+    's3_berichtsjahr': 'applookup/select',
+    's3_kategorie': 'lookup/select',
+    's3_aktivitaet': 'string/textarea',
+    's3_berechnungsmethode': 'lookup/radio',
+    's3_aktivitaetsmenge': 'number',
+    's3_einheit_aktivitaet': 'lookup/select',
+    's3_emissionsfaktor': 'applookup/select',
+    's3_co2e_menge': 'number',
+    's3_datenqualitaet': 'lookup/radio',
+    's3_bemerkungen': 'string/textarea',
+    's3_nachweis': 'file',
+  },
+  'emissionsfaktoren': {
+    'ef_bezeichnung': 'string/text',
+    'ef_scope': 'lookup/radio',
+    'ef_kategorie': 'lookup/select',
+    'ef_energietraeger': 'string/text',
+    'ef_einheit': 'lookup/select',
+    'ef_faktor': 'number',
+    'ef_treibhausgas': 'multiplelookup/checkbox',
+    'ef_quelle': 'string/text',
+    'ef_gueltigkeitsjahr': 'number',
+  },
+  'berichtsjahr': {
+    'jahr': 'number',
+    'startdatum': 'date/date',
+    'enddatum': 'date/date',
+    'ist_basisjahr': 'bool',
+    'status_jahr': 'lookup/radio',
+    'anmerkungen_jahr': 'string/textarea',
+  },
   'scope_1_–_direkte_emissionen': {
     's1_einheit': 'applookup/select',
     's1_berichtsjahr': 'applookup/select',
@@ -220,7 +271,6 @@ export const FIELD_TYPES: Record<string, Record<string, string>> = {
     's1_nachweis': 'file',
   },
   'scope_2_–_indirekte_energieemissionen': {
-    's2_einheit': 'applookup/select',
     's2_berichtsjahr': 'applookup/select',
     's2_energieart': 'lookup/select',
     's2_berechnungsmethode': 'lookup/radio',
@@ -232,6 +282,7 @@ export const FIELD_TYPES: Record<string, Record<string, string>> = {
     's2_herkunftsnachweis': 'bool',
     's2_bemerkungen': 'string/textarea',
     's2_nachweis': 'file',
+    's2_einheit': 'applookup/select',
   },
   'emissionen_schnelleingabe': {
     'se_einheit': 'applookup/select',
@@ -276,39 +327,6 @@ export const FIELD_TYPES: Record<string, Record<string, string>> = {
     'verantwortlich_email': 'string/email',
     'anmerkungen_einheit': 'string/textarea',
   },
-  'scope_3_–_weitere_indirekte_emissionen': {
-    's3_einheit': 'applookup/select',
-    's3_berichtsjahr': 'applookup/select',
-    's3_kategorie': 'lookup/select',
-    's3_aktivitaet': 'string/textarea',
-    's3_berechnungsmethode': 'lookup/radio',
-    's3_aktivitaetsmenge': 'number',
-    's3_einheit_aktivitaet': 'lookup/select',
-    's3_emissionsfaktor': 'applookup/select',
-    's3_co2e_menge': 'number',
-    's3_datenqualitaet': 'lookup/radio',
-    's3_bemerkungen': 'string/textarea',
-    's3_nachweis': 'file',
-  },
-  'emissionsfaktoren': {
-    'ef_bezeichnung': 'string/text',
-    'ef_scope': 'lookup/radio',
-    'ef_kategorie': 'lookup/select',
-    'ef_energietraeger': 'string/text',
-    'ef_einheit': 'lookup/select',
-    'ef_faktor': 'number',
-    'ef_treibhausgas': 'multiplelookup/checkbox',
-    'ef_quelle': 'string/text',
-    'ef_gueltigkeitsjahr': 'number',
-  },
-  'berichtsjahr': {
-    'jahr': 'number',
-    'startdatum': 'date/date',
-    'enddatum': 'date/date',
-    'ist_basisjahr': 'bool',
-    'status_jahr': 'lookup/radio',
-    'anmerkungen_jahr': 'string/textarea',
-  },
 };
 
 type StripLookup<T> = {
@@ -318,11 +336,11 @@ type StripLookup<T> = {
 };
 
 // Helper Types for creating new records (lookup fields as plain strings for API)
+export type CreateScope3WeitereIndirekteEmissionen = StripLookup<Scope3WeitereIndirekteEmissionen['fields']>;
+export type CreateEmissionsfaktoren = StripLookup<Emissionsfaktoren['fields']>;
+export type CreateBerichtsjahr = StripLookup<Berichtsjahr['fields']>;
 export type CreateScope1DirekteEmissionen = StripLookup<Scope1DirekteEmissionen['fields']>;
 export type CreateScope2IndirekteEnergieemissionen = StripLookup<Scope2IndirekteEnergieemissionen['fields']>;
 export type CreateEmissionenSchnelleingabe = StripLookup<EmissionenSchnelleingabe['fields']>;
 export type CreateGhgBerichtsuebersicht = StripLookup<GhgBerichtsuebersicht['fields']>;
 export type CreateKonzernstruktur = StripLookup<Konzernstruktur['fields']>;
-export type CreateScope3WeitereIndirekteEmissionen = StripLookup<Scope3WeitereIndirekteEmissionen['fields']>;
-export type CreateEmissionsfaktoren = StripLookup<Emissionsfaktoren['fields']>;
-export type CreateBerichtsjahr = StripLookup<Berichtsjahr['fields']>;

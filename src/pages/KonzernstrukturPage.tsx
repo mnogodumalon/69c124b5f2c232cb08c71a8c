@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LivingAppsService, extractRecordId, createRecordUrl } from '@/services/livingAppsService';
 import type { Konzernstruktur } from '@/types/app';
 import { APP_IDS } from '@/types/app';
@@ -11,19 +12,18 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { IconPencil, IconTrash, IconPlus, IconSearch, IconArrowsUpDown, IconArrowUp, IconArrowDown } from '@tabler/icons-react';
 import { KonzernstrukturDialog } from '@/components/dialogs/KonzernstrukturDialog';
-import { KonzernstrukturViewDialog } from '@/components/dialogs/KonzernstrukturViewDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageShell } from '@/components/PageShell';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
 
 export default function KonzernstrukturPage() {
+  const navigate = useNavigate();
   const [records, setRecords] = useState<Konzernstruktur[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<Konzernstruktur | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Konzernstruktur | null>(null);
-  const [viewingRecord, setViewingRecord] = useState<Konzernstruktur | null>(null);
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
@@ -186,7 +186,7 @@ export default function KonzernstrukturPage() {
           </TableHeader>
           <TableBody>
             {sortRecords(filtered).map(record => (
-              <TableRow key={record.record_id} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) return; setViewingRecord(record); }}>
+              <TableRow key={record.record_id} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) return; navigate(`/konzernstruktur/${record.record_id}`); }}>
                 <TableCell className="font-medium">{record.fields.einheit_name ?? '—'}</TableCell>
                 <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{record.fields.einheit_typ?.label ?? '—'}</span></TableCell>
                 <TableCell>{record.fields.uebergeordnete_einheit ?? '—'}</TableCell>
@@ -225,6 +225,7 @@ export default function KonzernstrukturPage() {
         onClose={() => { setDialogOpen(false); setEditingRecord(null); }}
         onSubmit={editingRecord ? handleUpdate : handleCreate}
         defaultValues={editingRecord?.fields}
+        recordId={editingRecord?.record_id}
         enablePhotoScan={AI_PHOTO_SCAN['Konzernstruktur']}
         enablePhotoLocation={AI_PHOTO_LOCATION['Konzernstruktur']}
       />
@@ -237,12 +238,6 @@ export default function KonzernstrukturPage() {
         description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
       />
 
-      <KonzernstrukturViewDialog
-        open={!!viewingRecord}
-        onClose={() => setViewingRecord(null)}
-        record={viewingRecord}
-        onEdit={(r) => { setViewingRecord(null); setEditingRecord(r); }}
-      />
     </PageShell>
   );
 }

@@ -29,7 +29,7 @@ import { Label } from '@/components/ui/label';
 const PROXY_BASE = '';
 // Replace with the app_id the landing page submits to. Must have an active
 // form-proxy hole with compatible allowed_fields.
-const APP_ID = '69c1246ff4e0dc2324ed9440';
+const APP_ID = '69c12471ef7da5f0b841a1a3';
 const SUBMIT_PATH = `/rest/apps/${APP_ID}/records`;
 const ALTCHA_SCRIPT_SRC = 'https://cdn.jsdelivr.net/npm/altcha/dist/altcha.min.js';
 

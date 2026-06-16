@@ -3,10 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select, SelectContent, SelectItem,
-  SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { DatePicker } from '@/components/DatePicker';
 import { lookupKey } from '@/lib/formatters';
 
 // Empty PROXY_BASE → relative URLs (dashboard and form-proxy share the domain).
@@ -132,8 +129,11 @@ export default function PublicFormGhgBerichtsuebersicht() {
             <Input
               id="gb_scope1_gesamt"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.gb_scope1_gesamt ?? ''}
-              onChange={e => setFields(f => ({ ...f, gb_scope1_gesamt: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, gb_scope1_gesamt: n })); }}
             />
           </div>
           <div className="space-y-2">
@@ -141,8 +141,11 @@ export default function PublicFormGhgBerichtsuebersicht() {
             <Input
               id="gb_scope2_marktbasiert"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.gb_scope2_marktbasiert ?? ''}
-              onChange={e => setFields(f => ({ ...f, gb_scope2_marktbasiert: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, gb_scope2_marktbasiert: n })); }}
             />
           </div>
           <div className="space-y-2">
@@ -150,8 +153,11 @@ export default function PublicFormGhgBerichtsuebersicht() {
             <Input
               id="gb_scope2_standortbasiert"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.gb_scope2_standortbasiert ?? ''}
-              onChange={e => setFields(f => ({ ...f, gb_scope2_standortbasiert: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, gb_scope2_standortbasiert: n })); }}
             />
           </div>
           <div className="space-y-2">
@@ -159,8 +165,11 @@ export default function PublicFormGhgBerichtsuebersicht() {
             <Input
               id="gb_scope3_gesamt"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.gb_scope3_gesamt ?? ''}
-              onChange={e => setFields(f => ({ ...f, gb_scope3_gesamt: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, gb_scope3_gesamt: n })); }}
             />
           </div>
           <div className="space-y-2">
@@ -168,8 +177,11 @@ export default function PublicFormGhgBerichtsuebersicht() {
             <Input
               id="gb_gesamt_co2e"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.gb_gesamt_co2e ?? ''}
-              onChange={e => setFields(f => ({ ...f, gb_gesamt_co2e: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, gb_gesamt_co2e: n })); }}
             />
           </div>
           <div className="space-y-2">
@@ -177,8 +189,11 @@ export default function PublicFormGhgBerichtsuebersicht() {
             <Input
               id="gb_intensitaet_umsatz"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.gb_intensitaet_umsatz ?? ''}
-              onChange={e => setFields(f => ({ ...f, gb_intensitaet_umsatz: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, gb_intensitaet_umsatz: n })); }}
             />
           </div>
           <div className="space-y-2">
@@ -186,8 +201,11 @@ export default function PublicFormGhgBerichtsuebersicht() {
             <Input
               id="gb_intensitaet_mitarbeiter"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.gb_intensitaet_mitarbeiter ?? ''}
-              onChange={e => setFields(f => ({ ...f, gb_intensitaet_mitarbeiter: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, gb_intensitaet_mitarbeiter: n })); }}
             />
           </div>
           <div className="space-y-2">
@@ -195,29 +213,62 @@ export default function PublicFormGhgBerichtsuebersicht() {
             <Input
               id="gb_basisjahr_vergleich"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.gb_basisjahr_vergleich ?? ''}
-              onChange={e => setFields(f => ({ ...f, gb_basisjahr_vergleich: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, gb_basisjahr_vergleich: n })); }}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="gb_verifizierungsstatus">Verifizierungsstatus</Label>
-            <Select
-              value={lookupKey(fields.gb_verifizierungsstatus) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, gb_verifizierungsstatus: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="gb_verifizierungsstatus"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="ungeprueft">Ungeprüft</SelectItem>
-                <SelectItem value="intern">Intern geprüft</SelectItem>
-                <SelectItem value="extern">Extern verifiziert</SelectItem>
-              </SelectContent>
-            </Select>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.gb_verifizierungsstatus) === 'ungeprueft'}
+                onClick={() => setFields(f => ({ ...f, gb_verifizierungsstatus: (lookupKey(f.gb_verifizierungsstatus) === 'ungeprueft' ? undefined : 'ungeprueft') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.gb_verifizierungsstatus) === 'ungeprueft'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Ungeprüft
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.gb_verifizierungsstatus) === 'intern'}
+                onClick={() => setFields(f => ({ ...f, gb_verifizierungsstatus: (lookupKey(f.gb_verifizierungsstatus) === 'intern' ? undefined : 'intern') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.gb_verifizierungsstatus) === 'intern'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Intern geprüft
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.gb_verifizierungsstatus) === 'extern'}
+                onClick={() => setFields(f => ({ ...f, gb_verifizierungsstatus: (lookupKey(f.gb_verifizierungsstatus) === 'extern' ? undefined : 'extern') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.gb_verifizierungsstatus) === 'extern'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Extern verifiziert
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="gb_pruefer_vorname">Vorname des Prüfers</Label>
             <Input
               id="gb_pruefer_vorname"
+              placeholder=""
               value={fields.gb_pruefer_vorname ?? ''}
               onChange={e => setFields(f => ({ ...f, gb_pruefer_vorname: e.target.value }))}
             />
@@ -226,23 +277,26 @@ export default function PublicFormGhgBerichtsuebersicht() {
             <Label htmlFor="gb_pruefer_nachname">Nachname des Prüfers</Label>
             <Input
               id="gb_pruefer_nachname"
+              placeholder=""
               value={fields.gb_pruefer_nachname ?? ''}
               onChange={e => setFields(f => ({ ...f, gb_pruefer_nachname: e.target.value }))}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="gb_pruefdatum">Prüfdatum</Label>
-            <Input
+            <DatePicker
               id="gb_pruefdatum"
-              type="date"
-              value={fields.gb_pruefdatum ?? ''}
-              onChange={e => setFields(f => ({ ...f, gb_pruefdatum: e.target.value }))}
+              placeholder=""
+              mode="date"
+              value={fields.gb_pruefdatum ?? null}
+              onChange={v => setFields(f => ({ ...f, gb_pruefdatum: v ?? undefined }))}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="gb_kommentare">Kommentare / Erläuterungen</Label>
             <Textarea
               id="gb_kommentare"
+              placeholder=""
               value={fields.gb_kommentare ?? ''}
               onChange={e => setFields(f => ({ ...f, gb_kommentare: e.target.value }))}
               rows={3}

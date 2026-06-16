@@ -3,11 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select, SelectContent, SelectItem,
-  SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { DatePicker } from '@/components/DatePicker';
 import { lookupKey } from '@/lib/formatters';
 
 // Empty PROXY_BASE → relative URLs (dashboard and form-proxy share the domain).
@@ -133,26 +130,31 @@ export default function PublicFormBerichtsjahr() {
             <Input
               id="jahr"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.jahr ?? ''}
-              onChange={e => setFields(f => ({ ...f, jahr: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, jahr: n })); }}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="startdatum">Startdatum</Label>
-            <Input
+            <DatePicker
               id="startdatum"
-              type="date"
-              value={fields.startdatum ?? ''}
-              onChange={e => setFields(f => ({ ...f, startdatum: e.target.value }))}
+              placeholder=""
+              mode="date"
+              value={fields.startdatum ?? null}
+              onChange={v => setFields(f => ({ ...f, startdatum: v ?? undefined }))}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="enddatum">Enddatum</Label>
-            <Input
+            <DatePicker
               id="enddatum"
-              type="date"
-              value={fields.enddatum ?? ''}
-              onChange={e => setFields(f => ({ ...f, enddatum: e.target.value }))}
+              placeholder=""
+              mode="date"
+              value={fields.enddatum ?? null}
+              onChange={v => setFields(f => ({ ...f, enddatum: v ?? undefined }))}
             />
           </div>
           <div className="space-y-2">
@@ -168,23 +170,53 @@ export default function PublicFormBerichtsjahr() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="status_jahr">Status</Label>
-            <Select
-              value={lookupKey(fields.status_jahr) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, status_jahr: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="status_jahr"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="geschlossen">Geschlossen</SelectItem>
-                <SelectItem value="archiviert">Archiviert</SelectItem>
-                <SelectItem value="offen">Offen</SelectItem>
-              </SelectContent>
-            </Select>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.status_jahr) === 'offen'}
+                onClick={() => setFields(f => ({ ...f, status_jahr: (lookupKey(f.status_jahr) === 'offen' ? undefined : 'offen') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.status_jahr) === 'offen'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Offen
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.status_jahr) === 'geschlossen'}
+                onClick={() => setFields(f => ({ ...f, status_jahr: (lookupKey(f.status_jahr) === 'geschlossen' ? undefined : 'geschlossen') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.status_jahr) === 'geschlossen'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Geschlossen
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.status_jahr) === 'archiviert'}
+                onClick={() => setFields(f => ({ ...f, status_jahr: (lookupKey(f.status_jahr) === 'archiviert' ? undefined : 'archiviert') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.status_jahr) === 'archiviert'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Archiviert
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="anmerkungen_jahr">Anmerkungen zum Berichtsjahr</Label>
             <Textarea
               id="anmerkungen_jahr"
+              placeholder=""
               value={fields.anmerkungen_jahr ?? ''}
               onChange={e => setFields(f => ({ ...f, anmerkungen_jahr: e.target.value }))}
               rows={3}

@@ -129,26 +129,55 @@ export default function PublicFormEmissionenSchnelleingabe() {
         <form onSubmit={handleSubmit} className="space-y-5 bg-card rounded-xl border border-border p-6 shadow-md">
           <div className="space-y-2">
             <Label htmlFor="se_scope">Scope</Label>
-            <Select
-              value={lookupKey(fields.se_scope) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, se_scope: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="se_scope"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="scope1">Scope 1 – Direkte Emissionen</SelectItem>
-                <SelectItem value="scope2">Scope 2 – Indirekte Energieemissionen</SelectItem>
-                <SelectItem value="scope3">Scope 3 – Weitere indirekte Emissionen</SelectItem>
-              </SelectContent>
-            </Select>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.se_scope) === 'scope1'}
+                onClick={() => setFields(f => ({ ...f, se_scope: (lookupKey(f.se_scope) === 'scope1' ? undefined : 'scope1') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.se_scope) === 'scope1'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Scope 1 – Direkte Emissionen
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.se_scope) === 'scope2'}
+                onClick={() => setFields(f => ({ ...f, se_scope: (lookupKey(f.se_scope) === 'scope2' ? undefined : 'scope2') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.se_scope) === 'scope2'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Scope 2 – Indirekte Energieemissionen
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.se_scope) === 'scope3'}
+                onClick={() => setFields(f => ({ ...f, se_scope: (lookupKey(f.se_scope) === 'scope3' ? undefined : 'scope3') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.se_scope) === 'scope3'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Scope 3 – Weitere indirekte Emissionen
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="se_unterkategorie">Unterkategorie / Scope-3-Kategorie</Label>
             <Select
-              value={lookupKey(fields.se_unterkategorie) ?? 'none'}
+              value={lookupKey(fields.se_unterkategorie) ?? ''}
               onValueChange={v => setFields(f => ({ ...f, se_unterkategorie: v === 'none' ? undefined : v as any }))}
             >
-              <SelectTrigger id="se_unterkategorie"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
+              <SelectTrigger id="se_unterkategorie"><SelectValue placeholder="" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">—</SelectItem>
                 <SelectItem value="s1_stationaer">Stationäre Verbrennung (Scope 1)</SelectItem>
@@ -181,6 +210,7 @@ export default function PublicFormEmissionenSchnelleingabe() {
             <Label htmlFor="se_aktivitaet">Aktivitätsbeschreibung</Label>
             <Input
               id="se_aktivitaet"
+              placeholder=""
               value={fields.se_aktivitaet ?? ''}
               onChange={e => setFields(f => ({ ...f, se_aktivitaet: e.target.value }))}
             />
@@ -190,17 +220,20 @@ export default function PublicFormEmissionenSchnelleingabe() {
             <Input
               id="se_aktivitaetsmenge"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.se_aktivitaetsmenge ?? ''}
-              onChange={e => setFields(f => ({ ...f, se_aktivitaetsmenge: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, se_aktivitaetsmenge: n })); }}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="se_einheit_menge">Einheit</Label>
             <Select
-              value={lookupKey(fields.se_einheit_menge) ?? 'none'}
+              value={lookupKey(fields.se_einheit_menge) ?? ''}
               onValueChange={v => setFields(f => ({ ...f, se_einheit_menge: v === 'none' ? undefined : v as any }))}
             >
-              <SelectTrigger id="se_einheit_menge"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
+              <SelectTrigger id="se_einheit_menge"><SelectValue placeholder="" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">—</SelectItem>
                 <SelectItem value="kwh">kWh</SelectItem>
@@ -222,29 +255,62 @@ export default function PublicFormEmissionenSchnelleingabe() {
             <Input
               id="se_co2e_menge"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.se_co2e_menge ?? ''}
-              onChange={e => setFields(f => ({ ...f, se_co2e_menge: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, se_co2e_menge: n })); }}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="se_datenqualitaet">Datenqualität</Label>
-            <Select
-              value={lookupKey(fields.se_datenqualitaet) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, se_datenqualitaet: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="se_datenqualitaet"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="primaer">Primärdaten (gemessen)</SelectItem>
-                <SelectItem value="sekundaer">Sekundärdaten (berechnet)</SelectItem>
-                <SelectItem value="schaetzung">Schätzung</SelectItem>
-              </SelectContent>
-            </Select>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.se_datenqualitaet) === 'primaer'}
+                onClick={() => setFields(f => ({ ...f, se_datenqualitaet: (lookupKey(f.se_datenqualitaet) === 'primaer' ? undefined : 'primaer') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.se_datenqualitaet) === 'primaer'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Primärdaten (gemessen)
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.se_datenqualitaet) === 'sekundaer'}
+                onClick={() => setFields(f => ({ ...f, se_datenqualitaet: (lookupKey(f.se_datenqualitaet) === 'sekundaer' ? undefined : 'sekundaer') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.se_datenqualitaet) === 'sekundaer'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Sekundärdaten (berechnet)
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.se_datenqualitaet) === 'schaetzung'}
+                onClick={() => setFields(f => ({ ...f, se_datenqualitaet: (lookupKey(f.se_datenqualitaet) === 'schaetzung' ? undefined : 'schaetzung') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.se_datenqualitaet) === 'schaetzung'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Schätzung
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="se_bemerkungen">Bemerkungen</Label>
             <Textarea
               id="se_bemerkungen"
+              placeholder=""
               value={fields.se_bemerkungen ?? ''}
               onChange={e => setFields(f => ({ ...f, se_bemerkungen: e.target.value }))}
               rows={3}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LivingAppsService, extractRecordId, createRecordUrl } from '@/services/livingAppsService';
 import type { Emissionsfaktoren } from '@/types/app';
 import { APP_IDS } from '@/types/app';
@@ -11,19 +12,18 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { IconPencil, IconTrash, IconPlus, IconSearch, IconArrowsUpDown, IconArrowUp, IconArrowDown } from '@tabler/icons-react';
 import { EmissionsfaktorenDialog } from '@/components/dialogs/EmissionsfaktorenDialog';
-import { EmissionsfaktorenViewDialog } from '@/components/dialogs/EmissionsfaktorenViewDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageShell } from '@/components/PageShell';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
 
 export default function EmissionsfaktorenPage() {
+  const navigate = useNavigate();
   const [records, setRecords] = useState<Emissionsfaktoren[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<Emissionsfaktoren | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Emissionsfaktoren | null>(null);
-  const [viewingRecord, setViewingRecord] = useState<Emissionsfaktoren | null>(null);
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
@@ -180,7 +180,7 @@ export default function EmissionsfaktorenPage() {
           </TableHeader>
           <TableBody>
             {sortRecords(filtered).map(record => (
-              <TableRow key={record.record_id} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) return; setViewingRecord(record); }}>
+              <TableRow key={record.record_id} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) return; navigate(`/emissionsfaktoren/${record.record_id}`); }}>
                 <TableCell className="font-medium">{record.fields.ef_bezeichnung ?? '—'}</TableCell>
                 <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{record.fields.ef_scope?.label ?? '—'}</span></TableCell>
                 <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{record.fields.ef_kategorie?.label ?? '—'}</span></TableCell>
@@ -218,6 +218,7 @@ export default function EmissionsfaktorenPage() {
         onClose={() => { setDialogOpen(false); setEditingRecord(null); }}
         onSubmit={editingRecord ? handleUpdate : handleCreate}
         defaultValues={editingRecord?.fields}
+        recordId={editingRecord?.record_id}
         enablePhotoScan={AI_PHOTO_SCAN['Emissionsfaktoren']}
         enablePhotoLocation={AI_PHOTO_LOCATION['Emissionsfaktoren']}
       />
@@ -230,12 +231,6 @@ export default function EmissionsfaktorenPage() {
         description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
       />
 
-      <EmissionsfaktorenViewDialog
-        open={!!viewingRecord}
-        onClose={() => setViewingRecord(null)}
-        record={viewingRecord}
-        onEdit={(r) => { setViewingRecord(null); setEditingRecord(r); }}
-      />
     </PageShell>
   );
 }

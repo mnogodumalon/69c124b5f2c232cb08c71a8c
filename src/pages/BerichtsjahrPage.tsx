@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LivingAppsService, extractRecordId, createRecordUrl } from '@/services/livingAppsService';
 import type { Berichtsjahr } from '@/types/app';
 import { APP_IDS } from '@/types/app';
@@ -11,7 +12,6 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { IconPencil, IconTrash, IconPlus, IconSearch, IconArrowsUpDown, IconArrowUp, IconArrowDown } from '@tabler/icons-react';
 import { BerichtsjahrDialog } from '@/components/dialogs/BerichtsjahrDialog';
-import { BerichtsjahrViewDialog } from '@/components/dialogs/BerichtsjahrViewDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageShell } from '@/components/PageShell';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
@@ -24,13 +24,13 @@ function formatDate(d?: string) {
 }
 
 export default function BerichtsjahrPage() {
+  const navigate = useNavigate();
   const [records, setRecords] = useState<Berichtsjahr[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<Berichtsjahr | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Berichtsjahr | null>(null);
-  const [viewingRecord, setViewingRecord] = useState<Berichtsjahr | null>(null);
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
@@ -169,7 +169,7 @@ export default function BerichtsjahrPage() {
           </TableHeader>
           <TableBody>
             {sortRecords(filtered).map(record => (
-              <TableRow key={record.record_id} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) return; setViewingRecord(record); }}>
+              <TableRow key={record.record_id} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) return; navigate(`/berichtsjahr/${record.record_id}`); }}>
                 <TableCell>{record.fields.jahr ?? '—'}</TableCell>
                 <TableCell className="text-muted-foreground">{formatDate(record.fields.startdatum)}</TableCell>
                 <TableCell className="text-muted-foreground">{formatDate(record.fields.enddatum)}</TableCell>
@@ -204,6 +204,7 @@ export default function BerichtsjahrPage() {
         onClose={() => { setDialogOpen(false); setEditingRecord(null); }}
         onSubmit={editingRecord ? handleUpdate : handleCreate}
         defaultValues={editingRecord?.fields}
+        recordId={editingRecord?.record_id}
         enablePhotoScan={AI_PHOTO_SCAN['Berichtsjahr']}
         enablePhotoLocation={AI_PHOTO_LOCATION['Berichtsjahr']}
       />
@@ -216,12 +217,6 @@ export default function BerichtsjahrPage() {
         description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
       />
 
-      <BerichtsjahrViewDialog
-        open={!!viewingRecord}
-        onClose={() => setViewingRecord(null)}
-        record={viewingRecord}
-        onEdit={(r) => { setViewingRecord(null); setEditingRecord(r); }}
-      />
     </PageShell>
   );
 }

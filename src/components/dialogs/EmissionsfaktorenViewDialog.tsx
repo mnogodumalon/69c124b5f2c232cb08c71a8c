@@ -5,6 +5,8 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { APP_IDS } from '@/types/app';
+import { AttachmentsSection } from '@/components/AttachmentsSection';
 import { Badge } from '@/components/ui/badge';
 import { IconPencil } from '@tabler/icons-react';
 
@@ -67,6 +69,9 @@ export function EmissionsfaktorenViewDialog({ open, onClose, record, onEdit }: E
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Gültigkeitsjahr</Label>
             <p className="text-sm">{record.fields.ef_gueltigkeitsjahr ?? '—'}</p>
+          </div>
+          <div className="pt-2 border-t border-border">
+            <AttachmentsSection appId={APP_IDS.EMISSIONSFAKTOREN} recordId={record.record_id} readOnly />
           </div>
         </div>
       </DialogContent>

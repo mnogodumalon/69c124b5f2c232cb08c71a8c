@@ -6,6 +6,9 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { APP_IDS } from '@/types/app';
+import { AttachmentsSection } from '@/components/AttachmentsSection';
+import { MediaThumbnail } from '@/components/widgets/MediaViewer';
 import { Badge } from '@/components/ui/badge';
 import { IconPencil, IconFileText } from '@tabler/icons-react';
 
@@ -93,10 +96,11 @@ export function Scope1DirekteEmissionenViewDialog({ open, onClose, record, onEdi
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Nachweis / Beleg (Datei-Upload)</Label>
             {record.fields.s1_nachweis ? (
-              <div className="relative w-full rounded-lg bg-muted overflow-hidden border">
-                <img src={record.fields.s1_nachweis} alt="" className="w-full h-auto object-contain" />
-              </div>
+              <MediaThumbnail src={record.fields.s1_nachweis} fit="contain" className="w-full rounded-lg border" />
             ) : <p className="text-sm text-muted-foreground">—</p>}
+          </div>
+          <div className="pt-2 border-t border-border">
+            <AttachmentsSection appId={APP_IDS["SCOPE_1_–_DIREKTE_EMISSIONEN"]} recordId={record.record_id} readOnly />
           </div>
         </div>
       </DialogContent>

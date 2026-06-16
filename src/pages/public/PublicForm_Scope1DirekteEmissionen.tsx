@@ -129,36 +129,80 @@ export default function PublicFormScope1DirekteEmissionen() {
         <form onSubmit={handleSubmit} className="space-y-5 bg-card rounded-xl border border-border p-6 shadow-md">
           <div className="space-y-2">
             <Label htmlFor="s1_unterkategorie">Unterkategorie</Label>
-            <Select
-              value={lookupKey(fields.s1_unterkategorie) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, s1_unterkategorie: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="s1_unterkategorie"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="stationaere_verbrennung">Stationäre Verbrennung</SelectItem>
-                <SelectItem value="mobile_verbrennung">Mobile Verbrennung</SelectItem>
-                <SelectItem value="prozessemissionen">Prozessemissionen</SelectItem>
-                <SelectItem value="fluechtige_emissionen">Flüchtige Emissionen</SelectItem>
-              </SelectContent>
-            </Select>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s1_unterkategorie) === 'stationaere_verbrennung'}
+                onClick={() => setFields(f => ({ ...f, s1_unterkategorie: (lookupKey(f.s1_unterkategorie) === 'stationaere_verbrennung' ? undefined : 'stationaere_verbrennung') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s1_unterkategorie) === 'stationaere_verbrennung'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Stationäre Verbrennung
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s1_unterkategorie) === 'mobile_verbrennung'}
+                onClick={() => setFields(f => ({ ...f, s1_unterkategorie: (lookupKey(f.s1_unterkategorie) === 'mobile_verbrennung' ? undefined : 'mobile_verbrennung') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s1_unterkategorie) === 'mobile_verbrennung'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Mobile Verbrennung
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s1_unterkategorie) === 'prozessemissionen'}
+                onClick={() => setFields(f => ({ ...f, s1_unterkategorie: (lookupKey(f.s1_unterkategorie) === 'prozessemissionen' ? undefined : 'prozessemissionen') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s1_unterkategorie) === 'prozessemissionen'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Prozessemissionen
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s1_unterkategorie) === 'fluechtige_emissionen'}
+                onClick={() => setFields(f => ({ ...f, s1_unterkategorie: (lookupKey(f.s1_unterkategorie) === 'fluechtige_emissionen' ? undefined : 'fluechtige_emissionen') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s1_unterkategorie) === 'fluechtige_emissionen'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Flüchtige Emissionen
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="s1_verbrauchsmenge">Verbrauchsmenge</Label>
             <Input
               id="s1_verbrauchsmenge"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.s1_verbrauchsmenge ?? ''}
-              onChange={e => setFields(f => ({ ...f, s1_verbrauchsmenge: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, s1_verbrauchsmenge: n })); }}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="s1_einheit_verbrauch">Einheit der Verbrauchsmenge</Label>
             <Select
-              value={lookupKey(fields.s1_einheit_verbrauch) ?? 'none'}
+              value={lookupKey(fields.s1_einheit_verbrauch) ?? ''}
               onValueChange={v => setFields(f => ({ ...f, s1_einheit_verbrauch: v === 'none' ? undefined : v as any }))}
             >
-              <SelectTrigger id="s1_einheit_verbrauch"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
+              <SelectTrigger id="s1_einheit_verbrauch"><SelectValue placeholder="" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">—</SelectItem>
                 <SelectItem value="kwh">kWh</SelectItem>
@@ -177,29 +221,62 @@ export default function PublicFormScope1DirekteEmissionen() {
             <Input
               id="s1_co2e_menge"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.s1_co2e_menge ?? ''}
-              onChange={e => setFields(f => ({ ...f, s1_co2e_menge: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, s1_co2e_menge: n })); }}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="s1_datenqualitaet">Datenqualität</Label>
-            <Select
-              value={lookupKey(fields.s1_datenqualitaet) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, s1_datenqualitaet: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="s1_datenqualitaet"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="primaer">Primärdaten (gemessen)</SelectItem>
-                <SelectItem value="sekundaer">Sekundärdaten (berechnet)</SelectItem>
-                <SelectItem value="schaetzung">Schätzung</SelectItem>
-              </SelectContent>
-            </Select>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s1_datenqualitaet) === 'primaer'}
+                onClick={() => setFields(f => ({ ...f, s1_datenqualitaet: (lookupKey(f.s1_datenqualitaet) === 'primaer' ? undefined : 'primaer') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s1_datenqualitaet) === 'primaer'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Primärdaten (gemessen)
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s1_datenqualitaet) === 'sekundaer'}
+                onClick={() => setFields(f => ({ ...f, s1_datenqualitaet: (lookupKey(f.s1_datenqualitaet) === 'sekundaer' ? undefined : 'sekundaer') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s1_datenqualitaet) === 'sekundaer'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Sekundärdaten (berechnet)
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s1_datenqualitaet) === 'schaetzung'}
+                onClick={() => setFields(f => ({ ...f, s1_datenqualitaet: (lookupKey(f.s1_datenqualitaet) === 'schaetzung' ? undefined : 'schaetzung') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s1_datenqualitaet) === 'schaetzung'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Schätzung
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="s1_bemerkungen">Bemerkungen</Label>
             <Textarea
               id="s1_bemerkungen"
+              placeholder=""
               value={fields.s1_bemerkungen ?? ''}
               onChange={e => setFields(f => ({ ...f, s1_bemerkungen: e.target.value }))}
               rows={3}

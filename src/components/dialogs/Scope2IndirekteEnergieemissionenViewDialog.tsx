@@ -1,4 +1,4 @@
-import type { Scope2IndirekteEnergieemissionen, Konzernstruktur, Berichtsjahr, Emissionsfaktoren } from '@/types/app';
+import type { Scope2IndirekteEnergieemissionen, Berichtsjahr, Emissionsfaktoren, Konzernstruktur } from '@/types/app';
 import { extractRecordId } from '@/services/livingAppsService';
 import {
   Dialog, DialogContent, DialogHeader,
@@ -6,6 +6,9 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { APP_IDS } from '@/types/app';
+import { AttachmentsSection } from '@/components/AttachmentsSection';
+import { MediaThumbnail } from '@/components/widgets/MediaViewer';
 import { Badge } from '@/components/ui/badge';
 import { IconPencil, IconFileText } from '@tabler/icons-react';
 
@@ -14,18 +17,12 @@ interface Scope2IndirekteEnergieemissionenViewDialogProps {
   onClose: () => void;
   record: Scope2IndirekteEnergieemissionen | null;
   onEdit: (record: Scope2IndirekteEnergieemissionen) => void;
-  konzernstrukturList: Konzernstruktur[];
   berichtsjahrList: Berichtsjahr[];
   emissionsfaktorenList: Emissionsfaktoren[];
+  konzernstrukturList: Konzernstruktur[];
 }
 
-export function Scope2IndirekteEnergieemissionenViewDialog({ open, onClose, record, onEdit, konzernstrukturList, berichtsjahrList, emissionsfaktorenList }: Scope2IndirekteEnergieemissionenViewDialogProps) {
-  function getKonzernstrukturDisplayName(url?: unknown) {
-    if (!url) return '—';
-    const id = extractRecordId(url);
-    return konzernstrukturList.find(r => r.record_id === id)?.fields.einheit_name ?? '—';
-  }
-
+export function Scope2IndirekteEnergieemissionenViewDialog({ open, onClose, record, onEdit, berichtsjahrList, emissionsfaktorenList, konzernstrukturList }: Scope2IndirekteEnergieemissionenViewDialogProps) {
   function getBerichtsjahrDisplayName(url?: unknown) {
     if (!url) return '—';
     const id = extractRecordId(url);
@@ -36,6 +33,12 @@ export function Scope2IndirekteEnergieemissionenViewDialog({ open, onClose, reco
     if (!url) return '—';
     const id = extractRecordId(url);
     return emissionsfaktorenList.find(r => r.record_id === id)?.fields.ef_bezeichnung ?? '—';
+  }
+
+  function getKonzernstrukturDisplayName(url?: unknown) {
+    if (!url) return '—';
+    const id = extractRecordId(url);
+    return konzernstrukturList.find(r => r.record_id === id)?.fields.einheit_name ?? '—';
   }
 
   if (!record) return null;
@@ -54,10 +57,6 @@ export function Scope2IndirekteEnergieemissionenViewDialog({ open, onClose, reco
         </div>
 
         <div className="space-y-4">
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Organisationseinheit</Label>
-            <p className="text-sm">{getKonzernstrukturDisplayName(record.fields.s2_einheit)}</p>
-          </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Berichtsjahr</Label>
             <p className="text-sm">{getBerichtsjahrDisplayName(record.fields.s2_berichtsjahr)}</p>
@@ -105,10 +104,15 @@ export function Scope2IndirekteEnergieemissionenViewDialog({ open, onClose, reco
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Nachweis / Beleg (Datei-Upload)</Label>
             {record.fields.s2_nachweis ? (
-              <div className="relative w-full rounded-lg bg-muted overflow-hidden border">
-                <img src={record.fields.s2_nachweis} alt="" className="w-full h-auto object-contain" />
-              </div>
+              <MediaThumbnail src={record.fields.s2_nachweis} fit="contain" className="w-full rounded-lg border" />
             ) : <p className="text-sm text-muted-foreground">—</p>}
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Organisationseinheit</Label>
+            <p className="text-sm">{getKonzernstrukturDisplayName(record.fields.s2_einheit)}</p>
+          </div>
+          <div className="pt-2 border-t border-border">
+            <AttachmentsSection appId={APP_IDS["SCOPE_2_–_INDIREKTE_ENERGIEEMISSIONEN"]} recordId={record.record_id} readOnly />
           </div>
         </div>
       </DialogContent>

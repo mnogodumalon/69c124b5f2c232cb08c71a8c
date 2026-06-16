@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LivingAppsService, extractRecordId, createRecordUrl } from '@/services/livingAppsService';
 import type { Scope3WeitereIndirekteEmissionen, Konzernstruktur, Berichtsjahr, Emissionsfaktoren } from '@/types/app';
 import { APP_IDS } from '@/types/app';
@@ -11,19 +12,18 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { IconPencil, IconTrash, IconPlus, IconSearch, IconArrowsUpDown, IconArrowUp, IconArrowDown, IconFileText } from '@tabler/icons-react';
 import { Scope3WeitereIndirekteEmissionenDialog } from '@/components/dialogs/Scope3WeitereIndirekteEmissionenDialog';
-import { Scope3WeitereIndirekteEmissionenViewDialog } from '@/components/dialogs/Scope3WeitereIndirekteEmissionenViewDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageShell } from '@/components/PageShell';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
 
 export default function Scope3WeitereIndirekteEmissionenPage() {
+  const navigate = useNavigate();
   const [records, setRecords] = useState<Scope3WeitereIndirekteEmissionen[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<Scope3WeitereIndirekteEmissionen | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Scope3WeitereIndirekteEmissionen | null>(null);
-  const [viewingRecord, setViewingRecord] = useState<Scope3WeitereIndirekteEmissionen | null>(null);
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [konzernstrukturList, setKonzernstrukturList] = useState<Konzernstruktur[]>([]);
@@ -228,7 +228,7 @@ export default function Scope3WeitereIndirekteEmissionenPage() {
           </TableHeader>
           <TableBody>
             {sortRecords(filtered).map(record => (
-              <TableRow key={record.record_id} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) return; setViewingRecord(record); }}>
+              <TableRow key={record.record_id} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) return; navigate(`/scope-3-–-weitere-indirekte-emissionen/${record.record_id}`); }}>
                 <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{getKonzernstrukturDisplayName(record.fields.s3_einheit)}</span></TableCell>
                 <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{getBerichtsjahrDisplayName(record.fields.s3_berichtsjahr)}</span></TableCell>
                 <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{record.fields.s3_kategorie?.label ?? '—'}</span></TableCell>
@@ -269,6 +269,7 @@ export default function Scope3WeitereIndirekteEmissionenPage() {
         onClose={() => { setDialogOpen(false); setEditingRecord(null); }}
         onSubmit={editingRecord ? handleUpdate : handleCreate}
         defaultValues={editingRecord?.fields}
+        recordId={editingRecord?.record_id}
         konzernstrukturList={konzernstrukturList}
         berichtsjahrList={berichtsjahrList}
         emissionsfaktorenList={emissionsfaktorenList}
@@ -284,15 +285,6 @@ export default function Scope3WeitereIndirekteEmissionenPage() {
         description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
       />
 
-      <Scope3WeitereIndirekteEmissionenViewDialog
-        open={!!viewingRecord}
-        onClose={() => setViewingRecord(null)}
-        record={viewingRecord}
-        onEdit={(r) => { setViewingRecord(null); setEditingRecord(r); }}
-        konzernstrukturList={konzernstrukturList}
-        berichtsjahrList={berichtsjahrList}
-        emissionsfaktorenList={emissionsfaktorenList}
-      />
     </PageShell>
   );
 }

@@ -442,6 +442,7 @@ export default function DashboardOverview() {
         onClose={() => { setSchnellDialog(false); setEditSchnell(null); }}
         onSubmit={handleSchnellSubmit}
         defaultValues={editSchnell?.fields}
+        recordId={editSchnell?.record_id}
         konzernstrukturList={konzernstruktur}
         berichtsjahrList={berichtsjahr}
         emissionsfaktorenList={emissionsfaktoren}

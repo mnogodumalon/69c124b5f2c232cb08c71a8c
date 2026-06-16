@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { Konzernstruktur } from '@/types/app';
 import { APP_IDS } from '@/types/app';
 import { extractRecordId, createRecordUrl, cleanFieldsForApi, getUserProfile } from '@/services/livingAppsService';
@@ -9,13 +9,17 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import type { ComputedContext } from '@/config/form-enhancements/types';
+import { applyFieldOrder, flattenFieldOrder, applyDefaults, evalComputed, numberInputProps, clampNumberValue, classifyComputed, extractApplookupRefs, mergeApplookupRefs, resolveApplookupRef } from '@/config/form-enhancements/types';
+import { formEnhancements, computedDeps, computedApplookupRefs } from '@/config/form-enhancements/Konzernstruktur';
+import { AttachmentsSection } from '@/components/AttachmentsSection';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { IconArrowBigDownLinesFilled, IconCamera, IconCircleCheck, IconClipboard, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
+import { IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
 import { fileToDataUri, extractFromInput, extractPhotoMeta, reverseGeocode } from '@/lib/ai';
 import { lookupKey } from '@/lib/formatters';
 
@@ -24,13 +28,27 @@ interface KonzernstrukturDialogProps {
   onClose: () => void;
   onSubmit: (fields: Konzernstruktur['fields']) => Promise<void>;
   defaultValues?: Konzernstruktur['fields'];
+  /** Record id when editing — enables the attachments section. Omit on create. */
+  recordId?: string;
   enablePhotoScan?: boolean;
   enablePhotoLocation?: boolean;
 }
 
-export function KonzernstrukturDialog({ open, onClose, onSubmit, defaultValues, enablePhotoScan = true, enablePhotoLocation = true }: KonzernstrukturDialogProps) {
+export function KonzernstrukturDialog({ open, onClose, onSubmit, defaultValues, recordId, enablePhotoScan = true, enablePhotoLocation = true }: KonzernstrukturDialogProps) {
   const [fields, setFields] = useState<Partial<Konzernstruktur['fields']>>({});
   const [saving, setSaving] = useState(false);
+  // Dirty-tracking: in edit-mode the Speichern button is disabled until the
+  // user actually changes something. JSON.stringify is good enough for our
+  // fields (plain values + LookupValue objects + string arrays).
+  const isDirty = useMemo(() => {
+    if (!defaultValues) return true;  // create-mode: always allow submit
+    try {
+      return JSON.stringify(fields) !== JSON.stringify(defaultValues);
+    } catch {
+      return true;
+    }
+  }, [fields, defaultValues]);
+  const [aiOpen, setAiOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -45,9 +63,41 @@ export function KonzernstrukturDialog({ open, onClose, onSubmit, defaultValues, 
   const [profileLoading, setProfileLoading] = useState(false);
   const [aiText, setAiText] = useState('');
 
+  // Computed-field plumbing. Pure no-op when formEnhancements.computed is {}.
+  // The number renderer uses computedValues only as a fallback when the user
+  // hasn't typed anything — clearing the input always restores the computation.
+  // computedContext exposes applookup list props so { kind: 'applookup', ... }
+  // operands can resolve to numeric fields on the target record.
+  const computedContext = useMemo<ComputedContext>(() => ({
+    lookupLists: {
+    },
+  }), []);
+  const computedValues = useMemo<Record<string, number | null>>(() => {
+    let out: Record<string, number | null> = {};
+    const entries = Object.entries(formEnhancements.computed);
+    for (let i = 0; i < 5; i++) {
+      const merged: Record<string, unknown> = { ...(fields as Record<string, unknown>) };
+      for (const [k, v] of Object.entries(out)) {
+        if (v === null) continue;
+        const cur = merged[k];
+        if (cur === undefined || cur === null || cur === '') merged[k] = v;
+      }
+      const next: Record<string, number | null> = {};
+      let changed = false;
+      for (const [key, spec] of entries) {
+        const v = evalComputed(spec, merged, computedContext);
+        next[key] = v;
+        if (v !== out[key]) changed = true;
+      }
+      out = next;
+      if (!changed) break;
+    }
+    return out;
+  }, [fields, computedContext]);
+
   useEffect(() => {
     if (open) {
-      setFields(defaultValues ?? {});
+      setFields(applyDefaults((defaultValues ?? {}) as Record<string, unknown>, formEnhancements.defaults) as Partial<Konzernstruktur['fields']>);
       setPreview(null);
       setScanSuccess(false);
       setAiText('');
@@ -74,7 +124,21 @@ export function KonzernstrukturDialog({ open, onClose, onSubmit, defaultValues, 
     e.preventDefault();
     setSaving(true);
     try {
-      const clean = cleanFieldsForApi({ ...fields }, 'konzernstruktur');
+      // Fill empty number slots from computed values; user-typed values always win.
+      // CRITICAL: only backend-mapped keys may be backfilled. Virtual computeds
+      // (sub-agent invents `_netto`, `_bestellung_gesamtbetrag` etc. for the
+      // "Berechnungen" display) have no backend counterpart — writing them
+      // triggers a 422 from the Living-Apps API ("field does not exist").
+      const merged = { ...fields };
+      for (const [key, val] of Object.entries(computedValues)) {
+        if (val === null) continue;
+        if (!backendFieldSet.has(key)) continue;
+        const cur = (merged as Record<string, unknown>)[key];
+        if (cur === undefined || cur === null || cur === '') {
+          (merged as Record<string, unknown>)[key] = val;
+        }
+      }
+      const clean = cleanFieldsForApi(merged, 'konzernstruktur');
       await onSubmit(clean as Konzernstruktur['fields']);
       onClose();
     } finally {
@@ -177,22 +241,327 @@ export function KonzernstrukturDialog({ open, onClose, onSubmit, defaultValues, 
 
   const DIALOG_INTENT = defaultValues ? 'Konzernstruktur bearbeiten' : 'Konzernstruktur hinzufügen';
 
-  return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{DIALOG_INTENT}</DialogTitle>
-        </DialogHeader>
+  const fieldBlocks: Record<string, React.ReactNode> = {
+    'einheit_name': (
+      <div key="einheit_name" className="space-y-1.5">
+        <Label htmlFor="einheit_name">Name der Einheit</Label>
+        <Input
+          id="einheit_name"
+          placeholder=""
+          value={fields.einheit_name ?? ''}
+          onChange={e => setFields(f => ({ ...f, einheit_name: e.target.value }))}
+        />
+      </div>
+    ),
+    'einheit_typ': (
+      <div key="einheit_typ" className="space-y-1.5">
+        <Label htmlFor="einheit_typ">Typ der Einheit</Label>
+        <div role="radiogroup" className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.einheit_typ) === 'konzern'}
+            onClick={() => setFields(f => ({ ...f, einheit_typ: (lookupKey(f.einheit_typ) === 'konzern' ? undefined : 'konzern') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.einheit_typ) === 'konzern'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Konzern
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.einheit_typ) === 'tochtergesellschaft'}
+            onClick={() => setFields(f => ({ ...f, einheit_typ: (lookupKey(f.einheit_typ) === 'tochtergesellschaft' ? undefined : 'tochtergesellschaft') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.einheit_typ) === 'tochtergesellschaft'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Tochtergesellschaft
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.einheit_typ) === 'abteilung'}
+            onClick={() => setFields(f => ({ ...f, einheit_typ: (lookupKey(f.einheit_typ) === 'abteilung' ? undefined : 'abteilung') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.einheit_typ) === 'abteilung'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Abteilung
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.einheit_typ) === 'werk'}
+            onClick={() => setFields(f => ({ ...f, einheit_typ: (lookupKey(f.einheit_typ) === 'werk' ? undefined : 'werk') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.einheit_typ) === 'werk'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Werk
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.einheit_typ) === 'niederlassung'}
+            onClick={() => setFields(f => ({ ...f, einheit_typ: (lookupKey(f.einheit_typ) === 'niederlassung' ? undefined : 'niederlassung') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.einheit_typ) === 'niederlassung'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Niederlassung
+          </button>
+        </div>
+      </div>
+    ),
+    'uebergeordnete_einheit': (
+      <div key="uebergeordnete_einheit" className="space-y-1.5">
+        <Label htmlFor="uebergeordnete_einheit">Übergeordnete Einheit (Name)</Label>
+        <Input
+          id="uebergeordnete_einheit"
+          placeholder=""
+          value={fields.uebergeordnete_einheit ?? ''}
+          onChange={e => setFields(f => ({ ...f, uebergeordnete_einheit: e.target.value }))}
+        />
+      </div>
+    ),
+    'land': (
+      <div key="land" className="space-y-1.5">
+        <Label htmlFor="land">Land</Label>
+        <Input
+          id="land"
+          value={fields.land ?? ''}
+          onChange={e => setFields(f => ({ ...f, land: e.target.value }))}
+        />
+      </div>
+    ),
+    'branche': (
+      <div key="branche" className="space-y-1.5">
+        <Label htmlFor="branche">Branche</Label>
+        <Select
+          value={lookupKey(fields.branche) ?? ''}
+          onValueChange={v => setFields(f => ({ ...f, branche: v === 'none' ? undefined : v as any }))}
+        >
+          <SelectTrigger id="branche"><SelectValue placeholder="" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">—</SelectItem>
+            <SelectItem value="industrie">Industrie & Fertigung</SelectItem>
+            <SelectItem value="energie">Energie & Versorgung</SelectItem>
+            <SelectItem value="handel">Handel & Logistik</SelectItem>
+            <SelectItem value="dienstleistungen">Dienstleistungen</SelectItem>
+            <SelectItem value="bauwesen">Bauwesen</SelectItem>
+            <SelectItem value="landwirtschaft">Landwirtschaft</SelectItem>
+            <SelectItem value="it">IT & Technologie</SelectItem>
+            <SelectItem value="gesundheit">Gesundheitswesen</SelectItem>
+            <SelectItem value="sonstige">Sonstige</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    ),
+    'konsolidierungsmethode': (
+      <div key="konsolidierungsmethode" className="space-y-1.5">
+        <Label htmlFor="konsolidierungsmethode">Konsolidierungsmethode</Label>
+        <div role="radiogroup" className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.konsolidierungsmethode) === 'operationale_kontrolle'}
+            onClick={() => setFields(f => ({ ...f, konsolidierungsmethode: (lookupKey(f.konsolidierungsmethode) === 'operationale_kontrolle' ? undefined : 'operationale_kontrolle') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.konsolidierungsmethode) === 'operationale_kontrolle'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Operationale Kontrolle
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.konsolidierungsmethode) === 'finanzielle_kontrolle'}
+            onClick={() => setFields(f => ({ ...f, konsolidierungsmethode: (lookupKey(f.konsolidierungsmethode) === 'finanzielle_kontrolle' ? undefined : 'finanzielle_kontrolle') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.konsolidierungsmethode) === 'finanzielle_kontrolle'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Finanzielle Kontrolle
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.konsolidierungsmethode) === 'equity_anteil'}
+            onClick={() => setFields(f => ({ ...f, konsolidierungsmethode: (lookupKey(f.konsolidierungsmethode) === 'equity_anteil' ? undefined : 'equity_anteil') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.konsolidierungsmethode) === 'equity_anteil'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Equity-Anteil
+          </button>
+        </div>
+      </div>
+    ),
+    'verantwortlich_vorname': (
+      <div key="verantwortlich_vorname" className="space-y-1.5">
+        <Label htmlFor="verantwortlich_vorname">Vorname der verantwortlichen Person</Label>
+        <Input
+          id="verantwortlich_vorname"
+          placeholder=""
+          value={fields.verantwortlich_vorname ?? ''}
+          onChange={e => setFields(f => ({ ...f, verantwortlich_vorname: e.target.value }))}
+        />
+      </div>
+    ),
+    'verantwortlich_nachname': (
+      <div key="verantwortlich_nachname" className="space-y-1.5">
+        <Label htmlFor="verantwortlich_nachname">Nachname der verantwortlichen Person</Label>
+        <Input
+          id="verantwortlich_nachname"
+          placeholder=""
+          value={fields.verantwortlich_nachname ?? ''}
+          onChange={e => setFields(f => ({ ...f, verantwortlich_nachname: e.target.value }))}
+        />
+      </div>
+    ),
+    'verantwortlich_email': (
+      <div key="verantwortlich_email" className="space-y-1.5">
+        <Label htmlFor="verantwortlich_email">E-Mail der verantwortlichen Person</Label>
+        <Input
+          id="verantwortlich_email"
+          type="email"
+          placeholder=""
+          value={fields.verantwortlich_email ?? ''}
+          onChange={e => setFields(f => ({ ...f, verantwortlich_email: e.target.value }))}
+        />
+      </div>
+    ),
+    'anmerkungen_einheit': (
+      <div key="anmerkungen_einheit" className="space-y-1.5">
+        <Label htmlFor="anmerkungen_einheit">Anmerkungen</Label>
+        <Textarea
+          id="anmerkungen_einheit"
+          placeholder=""
+          value={fields.anmerkungen_einheit ?? ''}
+          onChange={e => setFields(f => ({ ...f, anmerkungen_einheit: e.target.value }))}
+          rows={3}
+        />
+      </div>
+    ),
+  };
+  const orderedFields = applyFieldOrder(Object.keys(fieldBlocks), formEnhancements.fieldOrder);
+  const orderedFieldsKey = orderedFields.map((it) => typeof it === 'string' ? it : it.row.join('+')).join(',');
 
-        {enablePhotoScan && (
-          <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-            <div>
-              <div className="flex items-center gap-1.5 font-medium">
-                <IconSparkles className="h-4 w-4 text-primary" />
-                KI-Assistent
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">Versteht Fotos, Dokumente und Text und füllt alles für dich aus</p>
-            </div>
+  // Render-Modell für Computed-Felder:
+  //
+  //   • BACKEND-FELDER mit computed-Eintrag (z.B. gesamtpreis bei einer
+  //     Katzenpension) bleiben als normales Eingabe-Feld stehen. Der Number-
+  //     Input nutzt den computed-Wert als Vorschlag, der User kann jederzeit
+  //     überschreiben (clearing → restore computed).
+  //   • VIRTUELLE computed-Keys (Eintrag in formEnhancements.computed, ABER
+  //     kein passendes Backend-Feld in orderedFields) erscheinen NICHT als
+  //     Input, sondern unten als kompakte 'Berechnungen'-Übersicht oder als
+  //     Inline-Hint unter dem letzten beitragenden Input.
+  const FIELD_LABELS: Record<string, string> = {"einheit_name": "Name der Einheit", "einheit_typ": "Typ der Einheit", "uebergeordnete_einheit": "Übergeordnete Einheit (Name)", "land": "Land", "branche": "Branche", "konsolidierungsmethode": "Konsolidierungsmethode", "verantwortlich_vorname": "Vorname der verantwortlichen Person", "verantwortlich_nachname": "Nachname der verantwortlichen Person", "verantwortlich_email": "E-Mail der verantwortlichen Person", "anmerkungen_einheit": "Anmerkungen"};
+  const CURRENCY_KEYS = new Set<string>([]);
+  // Applookup-Referenz-Labels: pro applookup-Feld in dieser Form (ownKey)
+  // eine Map { lookupKey: label } für ALLE Felder des Target-Schemas. Wird
+  // beim Render-Walk gefiltert auf die in der computed-Formel tatsächlich
+  // referenzierten lookupKeys (siehe applookupRefs unten).
+  const APPLOOKUP_LABELS: Record<string, Record<string, string>> = {};
+  const inputFields = useMemo(() => flattenFieldOrder(orderedFields), [orderedFieldsKey]);
+  const backendFieldSet = useMemo(() => new Set(inputFields), [inputFields.join(',')]);
+  const virtualComputed = useMemo(
+    () => Object.fromEntries(
+      Object.entries(formEnhancements.computed).filter(([k]) => !backendFieldSet.has(k)),
+    ),
+    [backendFieldSet],
+  );
+  const virtualFormEnhancements = useMemo(
+    () => ({ ...formEnhancements, computed: virtualComputed }),
+    [virtualComputed],
+  );
+  const computedLayout = useMemo(
+    () => classifyComputed(virtualFormEnhancements, inputFields, computedDeps),
+    [virtualFormEnhancements, inputFields.join(',')],
+  );
+  // Applookup-Referenzen: pro ownKey (Lookup-Feld im Form) die Liste der
+  // lookupKeys, die in irgendeiner computed-Formel referenziert werden.
+  // MODUS-1: aus dem Spec-Tree extrahiert. MODUS-2: aus dem Build-Time-
+  // Export computedApplookupRefs (parse-formulas hat Regex-Pairs gesammelt).
+  // Pro (ownKey, lookupKey)-Paar nur einmal; pro ownKey können aber mehrere
+  // lookupKeys gleichzeitig auftauchen (z.B. einzelpreis UND karten10_preis
+  // beim Yoga-Kurs), und alle werden separat als Inline-Hint gerendert.
+  const applookupRefs = useMemo(
+    () => mergeApplookupRefs(
+      extractApplookupRefs(formEnhancements.computed),
+      computedApplookupRefs,
+    ),
+    [],
+  );
+  function summaryLabel(k: string): string {
+    if (FIELD_LABELS[k]) return FIELD_LABELS[k];
+    // Leading underscore(s) als Virtual-Marker abstreifen; Unterstriche zu
+    // Leerzeichen, jedes Wort kapitalisieren. Umlaute kommen vom Sub-Agent
+    // direkt im Key (z. B. `_buchung_dauer_nächte`) — JS/TS/Vite unterstützen
+    // Unicode-Identifier nativ, daher keine ASCII-Transliteration nötig.
+    return k.replace(/^_+/, '')
+      .split('_')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+  }
+  function formatSummaryValue(k: string, v: unknown): string {
+    if (v === undefined || v === null || v === '' || (typeof v === 'number' && !Number.isFinite(v))) return '—';
+    const n = typeof v === 'number' ? v : Number(v);
+    if (!Number.isFinite(n)) return String(v);
+    // Backend-Feld mit €-Label ODER virtueller Computed-Key, dessen Name nach Geld aussieht.
+    const looksLikeCurrency = CURRENCY_KEYS.has(k) || /(?:kosten|preis|betrag|gesamt|netto|brutto|summe|mwst|rabatt|anzahlung|umsatz|saldo)/i.test(k);
+    if (looksLikeCurrency) {
+      return n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    return n.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+  }
+
+  return (
+    <>
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[92vh] flex flex-col overflow-hidden p-0 gap-0">
+        <DialogHeader className="px-6 pt-5 pb-3 border-b flex flex-row items-center gap-3 space-y-0">
+          <DialogTitle className="flex-1 truncate text-left">{DIALOG_INTENT}</DialogTitle>
+          {enablePhotoScan && (
+            <button
+              type="button"
+              onClick={() => setAiOpen(o => !o)}
+              aria-expanded={aiOpen}
+              aria-controls="ai-fill-panel"
+              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all mr-7 shadow-sm ${
+                aiOpen
+                  ? 'bg-primary text-primary-foreground ring-2 ring-primary/30'
+                  : 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/15 hover:border-primary/50'
+              }`}
+            >
+              <IconSparkles className={`h-3.5 w-3.5 ${aiOpen ? '' : 'text-primary'}`} />
+              <span className="hidden sm:inline">KI-Ausfüllen</span>
+              <IconChevronDown className={`h-3 w-3 transition-transform ${aiOpen ? 'rotate-180' : ''}`} />
+            </button>
+          )}
+        </DialogHeader>
+        {enablePhotoScan && aiOpen && (
+          <div id="ai-fill-panel" className="border-b bg-muted/20 px-6 py-4 space-y-3">
+            <p className="text-xs text-muted-foreground">Versteht Fotos, Dokumente und Text und füllt alles für dich aus</p>
             <div className="flex items-start gap-2 pl-0.5">
               <Checkbox
                 id="ai-use-personal-info"
@@ -357,132 +726,113 @@ export function KonzernstrukturDialog({ open, onClose, onSubmit, defaultValues, 
                 <IconSparkles className="h-3.5 w-3.5 mr-1.5" />Analysieren
               </Button>
             )}
-            <div className="flex justify-center pt-1">
-              <IconArrowBigDownLinesFilled className="h-8 w-8 text-muted-foreground/30" />
-            </div>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="einheit_name">Name der Einheit</Label>
-            <Input
-              id="einheit_name"
-              value={fields.einheit_name ?? ''}
-              onChange={e => setFields(f => ({ ...f, einheit_name: e.target.value }))}
-            />
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0 min-w-0">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 space-y-4 min-w-0">
+            {(() => {
+              const renderField = (k: string) => {
+                const inlineHints = computedLayout.anchors[k] ?? [];
+                const refs = applookupRefs[k] ?? [];
+                return (
+                  <div key={k} className="space-y-1.5 min-w-0">
+                    {fieldBlocks[k]}
+                    {refs.map(({ lookupKey }) => {
+                      // Show the live numeric value the formula will pull from
+                      // the selected lookup target (e.g. "Monatspreis: 34,90 €"
+                      // under the Tarif combobox). Hidden while no lookup is
+                      // selected or the target field is non-numeric.
+                      const v = resolveApplookupRef(k, lookupKey, fields as Record<string, unknown>, computedContext);
+                      if (v === null) return null;
+                      const lbl = APPLOOKUP_LABELS[k]?.[lookupKey] ?? lookupKey;
+                      const text = formatSummaryValue(lookupKey, v);
+                      return (
+                        <div key={`alh-${k}-${lookupKey}`} className="flex items-center gap-1.5 pl-3 text-xs text-muted-foreground">
+                          <span className="text-primary/70">→</span>
+                          <span>{lbl}</span>
+                          <span className="ml-auto font-medium tabular-nums text-foreground">{text}</span>
+                        </div>
+                      );
+                    })}
+                    {inlineHints.map((cKey) => {
+                      const v = computedValues[cKey];
+                      const text = formatSummaryValue(cKey, v);
+                      if (text === '—') return null;
+                      return (
+                        <div key={cKey} className="flex items-center gap-1.5 pl-3 text-xs text-muted-foreground">
+                          <span className="text-primary/70">→</span>
+                          <span>{summaryLabel(cKey)}</span>
+                          <span className="ml-auto font-medium tabular-nums text-foreground">{text}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              };
+              return orderedFields.map((item, idx) => {
+                if (typeof item === 'string') return renderField(item);
+                const cols = item.cols ?? `repeat(${item.row.length}, minmax(0, 1fr))`;
+                return (
+                  <div key={`row-${idx}`} className="grid gap-3" style={{ gridTemplateColumns: cols }}>
+                    {item.row.map(renderField)}
+                  </div>
+                );
+              });
+            })()}
+            {(computedLayout.aggregates.length > 0 || computedLayout.finalTotal) && (
+              <div className="mt-6 pt-4 border-t border-border space-y-1.5">
+                {computedLayout.aggregates.length > 0 && (
+                  <dl className="space-y-1.5 pb-2">
+                    {computedLayout.aggregates.map((k) => {
+                      const userVal = (fields as Record<string, unknown>)[k];
+                      const computed = computedValues[k];
+                      const v = userVal !== undefined && userVal !== null && userVal !== '' ? userVal : computed;
+                      return (
+                        <div key={k} className="flex justify-between items-baseline gap-3">
+                          <dt className="text-sm text-muted-foreground truncate">{summaryLabel(k)}</dt>
+                          <dd className="text-sm font-medium tabular-nums whitespace-nowrap">{formatSummaryValue(k, v)}</dd>
+                        </div>
+                      );
+                    })}
+                  </dl>
+                )}
+                {computedLayout.finalTotal && (() => {
+                  const k = computedLayout.finalTotal;
+                  const userVal = (fields as Record<string, unknown>)[k];
+                  const computed = computedValues[k];
+                  const v = userVal !== undefined && userVal !== null && userVal !== '' ? userVal : computed;
+                  // Innere Border nur wenn aggregates existieren — sonst hätten wir
+                  // zwei direkt aufeinanderfolgende Striche (Outer + Inner) mit nur
+                  // einer Aggregat-Zeile dazwischen → zu viel visuelles Rauschen.
+                  const sep = computedLayout.aggregates.length > 0 ? 'pt-3 border-t border-border' : 'pt-1';
+                  return (
+                    <div className={`flex justify-between items-baseline gap-3 ${sep}`}>
+                      <span className="text-base font-semibold text-foreground">{summaryLabel(k)}</span>
+                      <span className="text-lg font-bold tabular-nums whitespace-nowrap text-foreground">{formatSummaryValue(k, v)}</span>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+            {recordId && (
+              <div className="pt-2 border-t border-border">
+                <AttachmentsSection appId={APP_IDS.KONZERNSTRUKTUR} recordId={recordId} />
+              </div>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="einheit_typ">Typ der Einheit</Label>
-            <Select
-              value={lookupKey(fields.einheit_typ) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, einheit_typ: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="einheit_typ"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="konzern">Konzern</SelectItem>
-                <SelectItem value="tochtergesellschaft">Tochtergesellschaft</SelectItem>
-                <SelectItem value="abteilung">Abteilung</SelectItem>
-                <SelectItem value="werk">Werk</SelectItem>
-                <SelectItem value="niederlassung">Niederlassung</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="uebergeordnete_einheit">Übergeordnete Einheit (Name)</Label>
-            <Input
-              id="uebergeordnete_einheit"
-              value={fields.uebergeordnete_einheit ?? ''}
-              onChange={e => setFields(f => ({ ...f, uebergeordnete_einheit: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="land">Land</Label>
-            <Input
-              id="land"
-              value={fields.land ?? ''}
-              onChange={e => setFields(f => ({ ...f, land: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="branche">Branche</Label>
-            <Select
-              value={lookupKey(fields.branche) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, branche: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="branche"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="industrie">Industrie & Fertigung</SelectItem>
-                <SelectItem value="energie">Energie & Versorgung</SelectItem>
-                <SelectItem value="handel">Handel & Logistik</SelectItem>
-                <SelectItem value="dienstleistungen">Dienstleistungen</SelectItem>
-                <SelectItem value="bauwesen">Bauwesen</SelectItem>
-                <SelectItem value="landwirtschaft">Landwirtschaft</SelectItem>
-                <SelectItem value="it">IT & Technologie</SelectItem>
-                <SelectItem value="gesundheit">Gesundheitswesen</SelectItem>
-                <SelectItem value="sonstige">Sonstige</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="konsolidierungsmethode">Konsolidierungsmethode</Label>
-            <Select
-              value={lookupKey(fields.konsolidierungsmethode) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, konsolidierungsmethode: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="konsolidierungsmethode"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="operationale_kontrolle">Operationale Kontrolle</SelectItem>
-                <SelectItem value="finanzielle_kontrolle">Finanzielle Kontrolle</SelectItem>
-                <SelectItem value="equity_anteil">Equity-Anteil</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="verantwortlich_vorname">Vorname der verantwortlichen Person</Label>
-            <Input
-              id="verantwortlich_vorname"
-              value={fields.verantwortlich_vorname ?? ''}
-              onChange={e => setFields(f => ({ ...f, verantwortlich_vorname: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="verantwortlich_nachname">Nachname der verantwortlichen Person</Label>
-            <Input
-              id="verantwortlich_nachname"
-              value={fields.verantwortlich_nachname ?? ''}
-              onChange={e => setFields(f => ({ ...f, verantwortlich_nachname: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="verantwortlich_email">E-Mail der verantwortlichen Person</Label>
-            <Input
-              id="verantwortlich_email"
-              type="email"
-              value={fields.verantwortlich_email ?? ''}
-              onChange={e => setFields(f => ({ ...f, verantwortlich_email: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="anmerkungen_einheit">Anmerkungen</Label>
-            <Textarea
-              id="anmerkungen_einheit"
-              value={fields.anmerkungen_einheit ?? ''}
-              onChange={e => setFields(f => ({ ...f, anmerkungen_einheit: e.target.value }))}
-              rows={3}
-            />
-          </div>
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-            <Button type="submit" disabled={saving}>
+            <Button
+              type="submit"
+              disabled={saving || !isDirty}
+            >
               {saving ? 'Speichern...' : defaultValues ? 'Speichern' : 'Erstellen'}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

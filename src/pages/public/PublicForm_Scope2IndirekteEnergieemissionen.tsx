@@ -3,10 +3,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select, SelectContent, SelectItem,
-  SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { lookupKey } from '@/lib/formatters';
 
@@ -130,42 +126,115 @@ export default function PublicFormScope2IndirekteEnergieemissionen() {
         <form onSubmit={handleSubmit} className="space-y-5 bg-card rounded-xl border border-border p-6 shadow-md">
           <div className="space-y-2">
             <Label htmlFor="s2_energieart">Energieart</Label>
-            <Select
-              value={lookupKey(fields.s2_energieart) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, s2_energieart: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="s2_energieart"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="strom">Strom</SelectItem>
-                <SelectItem value="fernwaerme">Fernwärme</SelectItem>
-                <SelectItem value="fernkaelte">Fernkälte</SelectItem>
-                <SelectItem value="dampf">Dampf</SelectItem>
-              </SelectContent>
-            </Select>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s2_energieart) === 'strom'}
+                onClick={() => setFields(f => ({ ...f, s2_energieart: (lookupKey(f.s2_energieart) === 'strom' ? undefined : 'strom') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s2_energieart) === 'strom'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Strom
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s2_energieart) === 'fernwaerme'}
+                onClick={() => setFields(f => ({ ...f, s2_energieart: (lookupKey(f.s2_energieart) === 'fernwaerme' ? undefined : 'fernwaerme') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s2_energieart) === 'fernwaerme'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Fernwärme
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s2_energieart) === 'fernkaelte'}
+                onClick={() => setFields(f => ({ ...f, s2_energieart: (lookupKey(f.s2_energieart) === 'fernkaelte' ? undefined : 'fernkaelte') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s2_energieart) === 'fernkaelte'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Fernkälte
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s2_energieart) === 'dampf'}
+                onClick={() => setFields(f => ({ ...f, s2_energieart: (lookupKey(f.s2_energieart) === 'dampf' ? undefined : 'dampf') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s2_energieart) === 'dampf'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Dampf
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="s2_berechnungsmethode">Berechnungsmethode</Label>
-            <Select
-              value={lookupKey(fields.s2_berechnungsmethode) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, s2_berechnungsmethode: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="s2_berechnungsmethode"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="marktbasiert">Marktbasiert</SelectItem>
-                <SelectItem value="standortbasiert">Standortbasiert</SelectItem>
-                <SelectItem value="beide">Beide</SelectItem>
-              </SelectContent>
-            </Select>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s2_berechnungsmethode) === 'marktbasiert'}
+                onClick={() => setFields(f => ({ ...f, s2_berechnungsmethode: (lookupKey(f.s2_berechnungsmethode) === 'marktbasiert' ? undefined : 'marktbasiert') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s2_berechnungsmethode) === 'marktbasiert'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Marktbasiert
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s2_berechnungsmethode) === 'standortbasiert'}
+                onClick={() => setFields(f => ({ ...f, s2_berechnungsmethode: (lookupKey(f.s2_berechnungsmethode) === 'standortbasiert' ? undefined : 'standortbasiert') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s2_berechnungsmethode) === 'standortbasiert'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Standortbasiert
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.s2_berechnungsmethode) === 'beide'}
+                onClick={() => setFields(f => ({ ...f, s2_berechnungsmethode: (lookupKey(f.s2_berechnungsmethode) === 'beide' ? undefined : 'beide') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.s2_berechnungsmethode) === 'beide'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Beide
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="s2_verbrauch_kwh">Verbrauchsmenge (kWh)</Label>
             <Input
               id="s2_verbrauch_kwh"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.s2_verbrauch_kwh ?? ''}
-              onChange={e => setFields(f => ({ ...f, s2_verbrauch_kwh: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, s2_verbrauch_kwh: n })); }}
             />
           </div>
           <div className="space-y-2">
@@ -173,8 +242,11 @@ export default function PublicFormScope2IndirekteEnergieemissionen() {
             <Input
               id="s2_co2e_marktbasiert"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.s2_co2e_marktbasiert ?? ''}
-              onChange={e => setFields(f => ({ ...f, s2_co2e_marktbasiert: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, s2_co2e_marktbasiert: n })); }}
             />
           </div>
           <div className="space-y-2">
@@ -182,14 +254,18 @@ export default function PublicFormScope2IndirekteEnergieemissionen() {
             <Input
               id="s2_co2e_standortbasiert"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.s2_co2e_standortbasiert ?? ''}
-              onChange={e => setFields(f => ({ ...f, s2_co2e_standortbasiert: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, s2_co2e_standortbasiert: n })); }}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="s2_lieferant">Lieferant / Energieversorger</Label>
             <Input
               id="s2_lieferant"
+              placeholder=""
               value={fields.s2_lieferant ?? ''}
               onChange={e => setFields(f => ({ ...f, s2_lieferant: e.target.value }))}
             />
@@ -209,6 +285,7 @@ export default function PublicFormScope2IndirekteEnergieemissionen() {
             <Label htmlFor="s2_bemerkungen">Bemerkungen</Label>
             <Textarea
               id="s2_bemerkungen"
+              placeholder=""
               value={fields.s2_bemerkungen ?? ''}
               onChange={e => setFields(f => ({ ...f, s2_bemerkungen: e.target.value }))}
               rows={3}

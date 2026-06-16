@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { Emissionsfaktoren } from '@/types/app';
 import { APP_IDS } from '@/types/app';
 import { extractRecordId, createRecordUrl, cleanFieldsForApi, getUserProfile } from '@/services/livingAppsService';
@@ -9,13 +9,17 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import type { ComputedContext } from '@/config/form-enhancements/types';
+import { applyFieldOrder, flattenFieldOrder, applyDefaults, evalComputed, numberInputProps, clampNumberValue, classifyComputed, extractApplookupRefs, mergeApplookupRefs, resolveApplookupRef } from '@/config/form-enhancements/types';
+import { formEnhancements, computedDeps, computedApplookupRefs } from '@/config/form-enhancements/Emissionsfaktoren';
+import { AttachmentsSection } from '@/components/AttachmentsSection';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { IconArrowBigDownLinesFilled, IconCamera, IconCircleCheck, IconClipboard, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
+import { IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
 import { fileToDataUri, extractFromInput, extractPhotoMeta, reverseGeocode } from '@/lib/ai';
 import { lookupKey, lookupKeys } from '@/lib/formatters';
 
@@ -24,13 +28,27 @@ interface EmissionsfaktorenDialogProps {
   onClose: () => void;
   onSubmit: (fields: Emissionsfaktoren['fields']) => Promise<void>;
   defaultValues?: Emissionsfaktoren['fields'];
+  /** Record id when editing — enables the attachments section. Omit on create. */
+  recordId?: string;
   enablePhotoScan?: boolean;
   enablePhotoLocation?: boolean;
 }
 
-export function EmissionsfaktorenDialog({ open, onClose, onSubmit, defaultValues, enablePhotoScan = true, enablePhotoLocation = true }: EmissionsfaktorenDialogProps) {
+export function EmissionsfaktorenDialog({ open, onClose, onSubmit, defaultValues, recordId, enablePhotoScan = true, enablePhotoLocation = true }: EmissionsfaktorenDialogProps) {
   const [fields, setFields] = useState<Partial<Emissionsfaktoren['fields']>>({});
   const [saving, setSaving] = useState(false);
+  // Dirty-tracking: in edit-mode the Speichern button is disabled until the
+  // user actually changes something. JSON.stringify is good enough for our
+  // fields (plain values + LookupValue objects + string arrays).
+  const isDirty = useMemo(() => {
+    if (!defaultValues) return true;  // create-mode: always allow submit
+    try {
+      return JSON.stringify(fields) !== JSON.stringify(defaultValues);
+    } catch {
+      return true;
+    }
+  }, [fields, defaultValues]);
+  const [aiOpen, setAiOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -45,9 +63,41 @@ export function EmissionsfaktorenDialog({ open, onClose, onSubmit, defaultValues
   const [profileLoading, setProfileLoading] = useState(false);
   const [aiText, setAiText] = useState('');
 
+  // Computed-field plumbing. Pure no-op when formEnhancements.computed is {}.
+  // The number renderer uses computedValues only as a fallback when the user
+  // hasn't typed anything — clearing the input always restores the computation.
+  // computedContext exposes applookup list props so { kind: 'applookup', ... }
+  // operands can resolve to numeric fields on the target record.
+  const computedContext = useMemo<ComputedContext>(() => ({
+    lookupLists: {
+    },
+  }), []);
+  const computedValues = useMemo<Record<string, number | null>>(() => {
+    let out: Record<string, number | null> = {};
+    const entries = Object.entries(formEnhancements.computed);
+    for (let i = 0; i < 5; i++) {
+      const merged: Record<string, unknown> = { ...(fields as Record<string, unknown>) };
+      for (const [k, v] of Object.entries(out)) {
+        if (v === null) continue;
+        const cur = merged[k];
+        if (cur === undefined || cur === null || cur === '') merged[k] = v;
+      }
+      const next: Record<string, number | null> = {};
+      let changed = false;
+      for (const [key, spec] of entries) {
+        const v = evalComputed(spec, merged, computedContext);
+        next[key] = v;
+        if (v !== out[key]) changed = true;
+      }
+      out = next;
+      if (!changed) break;
+    }
+    return out;
+  }, [fields, computedContext]);
+
   useEffect(() => {
     if (open) {
-      setFields(defaultValues ?? {});
+      setFields(applyDefaults((defaultValues ?? {}) as Record<string, unknown>, formEnhancements.defaults) as Partial<Emissionsfaktoren['fields']>);
       setPreview(null);
       setScanSuccess(false);
       setAiText('');
@@ -74,7 +124,21 @@ export function EmissionsfaktorenDialog({ open, onClose, onSubmit, defaultValues
     e.preventDefault();
     setSaving(true);
     try {
-      const clean = cleanFieldsForApi({ ...fields }, 'emissionsfaktoren');
+      // Fill empty number slots from computed values; user-typed values always win.
+      // CRITICAL: only backend-mapped keys may be backfilled. Virtual computeds
+      // (sub-agent invents `_netto`, `_bestellung_gesamtbetrag` etc. for the
+      // "Berechnungen" display) have no backend counterpart — writing them
+      // triggers a 422 from the Living-Apps API ("field does not exist").
+      const merged = { ...fields };
+      for (const [key, val] of Object.entries(computedValues)) {
+        if (val === null) continue;
+        if (!backendFieldSet.has(key)) continue;
+        const cur = (merged as Record<string, unknown>)[key];
+        if (cur === undefined || cur === null || cur === '') {
+          (merged as Record<string, unknown>)[key] = val;
+        }
+      }
+      const clean = cleanFieldsForApi(merged, 'emissionsfaktoren');
       await onSubmit(clean as Emissionsfaktoren['fields']);
       onClose();
     } finally {
@@ -177,22 +241,370 @@ export function EmissionsfaktorenDialog({ open, onClose, onSubmit, defaultValues
 
   const DIALOG_INTENT = defaultValues ? 'Emissionsfaktoren bearbeiten' : 'Emissionsfaktoren hinzufügen';
 
-  return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{DIALOG_INTENT}</DialogTitle>
-        </DialogHeader>
+  const fieldBlocks: Record<string, React.ReactNode> = {
+    'ef_bezeichnung': (
+      <div key="ef_bezeichnung" className="space-y-1.5">
+        <Label htmlFor="ef_bezeichnung">Bezeichnung</Label>
+        <Input
+          id="ef_bezeichnung"
+          placeholder=""
+          value={fields.ef_bezeichnung ?? ''}
+          onChange={e => setFields(f => ({ ...f, ef_bezeichnung: e.target.value }))}
+        />
+      </div>
+    ),
+    'ef_scope': (
+      <div key="ef_scope" className="space-y-1.5">
+        <Label htmlFor="ef_scope">Scope-Zuordnung</Label>
+        <div role="radiogroup" className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.ef_scope) === 'scope1'}
+            onClick={() => setFields(f => ({ ...f, ef_scope: (lookupKey(f.ef_scope) === 'scope1' ? undefined : 'scope1') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.ef_scope) === 'scope1'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Scope 1
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.ef_scope) === 'scope2'}
+            onClick={() => setFields(f => ({ ...f, ef_scope: (lookupKey(f.ef_scope) === 'scope2' ? undefined : 'scope2') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.ef_scope) === 'scope2'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Scope 2
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.ef_scope) === 'scope3'}
+            onClick={() => setFields(f => ({ ...f, ef_scope: (lookupKey(f.ef_scope) === 'scope3' ? undefined : 'scope3') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.ef_scope) === 'scope3'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Scope 3
+          </button>
+        </div>
+      </div>
+    ),
+    'ef_kategorie': (
+      <div key="ef_kategorie" className="space-y-1.5">
+        <Label htmlFor="ef_kategorie">Kategorie</Label>
+        <Select
+          value={lookupKey(fields.ef_kategorie) ?? ''}
+          onValueChange={v => setFields(f => ({ ...f, ef_kategorie: v === 'none' ? undefined : v as any }))}
+        >
+          <SelectTrigger id="ef_kategorie"><SelectValue placeholder="" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">—</SelectItem>
+            <SelectItem value="stationaere_verbrennung">Stationäre Verbrennung</SelectItem>
+            <SelectItem value="mobile_verbrennung">Mobile Verbrennung</SelectItem>
+            <SelectItem value="prozessemissionen">Prozessemissionen</SelectItem>
+            <SelectItem value="fluechtige_emissionen">Flüchtige Emissionen</SelectItem>
+            <SelectItem value="strom">Eingekaufter Strom</SelectItem>
+            <SelectItem value="waerme">Eingekaufte Wärme</SelectItem>
+            <SelectItem value="kaelte">Eingekaufte Kälte</SelectItem>
+            <SelectItem value="dampf">Eingekaufter Dampf</SelectItem>
+            <SelectItem value="vorgelagert">Vorgelagerte Emissionen</SelectItem>
+            <SelectItem value="nachgelagert">Nachgelagerte Emissionen</SelectItem>
+            <SelectItem value="sonstige">Sonstige</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    ),
+    'ef_energietraeger': (
+      <div key="ef_energietraeger" className="space-y-1.5">
+        <Label htmlFor="ef_energietraeger">Energieträger / Aktivität</Label>
+        <Input
+          id="ef_energietraeger"
+          placeholder=""
+          value={fields.ef_energietraeger ?? ''}
+          onChange={e => setFields(f => ({ ...f, ef_energietraeger: e.target.value }))}
+        />
+      </div>
+    ),
+    'ef_einheit': (
+      <div key="ef_einheit" className="space-y-1.5">
+        <Label htmlFor="ef_einheit">Einheit</Label>
+        <Select
+          value={lookupKey(fields.ef_einheit) ?? ''}
+          onValueChange={v => setFields(f => ({ ...f, ef_einheit: v === 'none' ? undefined : v as any }))}
+        >
+          <SelectTrigger id="ef_einheit"><SelectValue placeholder="" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">—</SelectItem>
+            <SelectItem value="kwh">kWh</SelectItem>
+            <SelectItem value="mwh">MWh</SelectItem>
+            <SelectItem value="gj">GJ</SelectItem>
+            <SelectItem value="liter">Liter</SelectItem>
+            <SelectItem value="kg">kg</SelectItem>
+            <SelectItem value="tonne">Tonne</SelectItem>
+            <SelectItem value="m3">m³</SelectItem>
+            <SelectItem value="tkm">tkm</SelectItem>
+            <SelectItem value="pkm">Personenkilometer</SelectItem>
+            <SelectItem value="eur">EUR</SelectItem>
+            <SelectItem value="sonstige">Sonstige</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    ),
+    'ef_faktor': (
+      <div key="ef_faktor" className="space-y-1.5">
+        <Label htmlFor="ef_faktor">Emissionsfaktor (kg CO2e pro Einheit)</Label>
+        <Input
+          id="ef_faktor"
+          type="number"
+          step="any"
+          {...numberInputProps(formEnhancements, 'ef_faktor')}
+          placeholder=""
+          value={fields.ef_faktor !== undefined ? fields.ef_faktor : (computedValues['ef_faktor'] ?? '')}
+          onChange={e => setFields(f => ({ ...f, ef_faktor: clampNumberValue(formEnhancements, 'ef_faktor', e.target.value) }))}
+        />
+      </div>
+    ),
+    'ef_treibhausgas': (
+      <div key="ef_treibhausgas" className="space-y-1.5">
+        <Label htmlFor="ef_treibhausgas">Treibhausgase</Label>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="ef_treibhausgas_co2"
+              checked={lookupKeys(fields.ef_treibhausgas).includes('co2')}
+              onCheckedChange={(checked) => {
+                setFields(f => {
+                  const current = lookupKeys(f.ef_treibhausgas);
+                  const next = checked ? [...current, 'co2'] : current.filter(k => k !== 'co2');
+                  return { ...f, ef_treibhausgas: next.length ? next as any : undefined };
+                });
+              }}
+            />
+            <Label htmlFor="ef_treibhausgas_co2" className="font-normal">CO2</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="ef_treibhausgas_ch4"
+              checked={lookupKeys(fields.ef_treibhausgas).includes('ch4')}
+              onCheckedChange={(checked) => {
+                setFields(f => {
+                  const current = lookupKeys(f.ef_treibhausgas);
+                  const next = checked ? [...current, 'ch4'] : current.filter(k => k !== 'ch4');
+                  return { ...f, ef_treibhausgas: next.length ? next as any : undefined };
+                });
+              }}
+            />
+            <Label htmlFor="ef_treibhausgas_ch4" className="font-normal">CH4</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="ef_treibhausgas_n2o"
+              checked={lookupKeys(fields.ef_treibhausgas).includes('n2o')}
+              onCheckedChange={(checked) => {
+                setFields(f => {
+                  const current = lookupKeys(f.ef_treibhausgas);
+                  const next = checked ? [...current, 'n2o'] : current.filter(k => k !== 'n2o');
+                  return { ...f, ef_treibhausgas: next.length ? next as any : undefined };
+                });
+              }}
+            />
+            <Label htmlFor="ef_treibhausgas_n2o" className="font-normal">N2O</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="ef_treibhausgas_hfc"
+              checked={lookupKeys(fields.ef_treibhausgas).includes('hfc')}
+              onCheckedChange={(checked) => {
+                setFields(f => {
+                  const current = lookupKeys(f.ef_treibhausgas);
+                  const next = checked ? [...current, 'hfc'] : current.filter(k => k !== 'hfc');
+                  return { ...f, ef_treibhausgas: next.length ? next as any : undefined };
+                });
+              }}
+            />
+            <Label htmlFor="ef_treibhausgas_hfc" className="font-normal">HFC</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="ef_treibhausgas_pfc"
+              checked={lookupKeys(fields.ef_treibhausgas).includes('pfc')}
+              onCheckedChange={(checked) => {
+                setFields(f => {
+                  const current = lookupKeys(f.ef_treibhausgas);
+                  const next = checked ? [...current, 'pfc'] : current.filter(k => k !== 'pfc');
+                  return { ...f, ef_treibhausgas: next.length ? next as any : undefined };
+                });
+              }}
+            />
+            <Label htmlFor="ef_treibhausgas_pfc" className="font-normal">PFC</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="ef_treibhausgas_sf6"
+              checked={lookupKeys(fields.ef_treibhausgas).includes('sf6')}
+              onCheckedChange={(checked) => {
+                setFields(f => {
+                  const current = lookupKeys(f.ef_treibhausgas);
+                  const next = checked ? [...current, 'sf6'] : current.filter(k => k !== 'sf6');
+                  return { ...f, ef_treibhausgas: next.length ? next as any : undefined };
+                });
+              }}
+            />
+            <Label htmlFor="ef_treibhausgas_sf6" className="font-normal">SF6</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="ef_treibhausgas_nf3"
+              checked={lookupKeys(fields.ef_treibhausgas).includes('nf3')}
+              onCheckedChange={(checked) => {
+                setFields(f => {
+                  const current = lookupKeys(f.ef_treibhausgas);
+                  const next = checked ? [...current, 'nf3'] : current.filter(k => k !== 'nf3');
+                  return { ...f, ef_treibhausgas: next.length ? next as any : undefined };
+                });
+              }}
+            />
+            <Label htmlFor="ef_treibhausgas_nf3" className="font-normal">NF3</Label>
+          </div>
+        </div>
+      </div>
+    ),
+    'ef_quelle': (
+      <div key="ef_quelle" className="space-y-1.5">
+        <Label htmlFor="ef_quelle">Quelle / Referenz</Label>
+        <Input
+          id="ef_quelle"
+          placeholder=""
+          value={fields.ef_quelle ?? ''}
+          onChange={e => setFields(f => ({ ...f, ef_quelle: e.target.value }))}
+        />
+      </div>
+    ),
+    'ef_gueltigkeitsjahr': (
+      <div key="ef_gueltigkeitsjahr" className="space-y-1.5">
+        <Label htmlFor="ef_gueltigkeitsjahr">Gültigkeitsjahr</Label>
+        <Input
+          id="ef_gueltigkeitsjahr"
+          type="number"
+          step="any"
+          {...numberInputProps(formEnhancements, 'ef_gueltigkeitsjahr')}
+          placeholder=""
+          value={fields.ef_gueltigkeitsjahr !== undefined ? fields.ef_gueltigkeitsjahr : (computedValues['ef_gueltigkeitsjahr'] ?? '')}
+          onChange={e => setFields(f => ({ ...f, ef_gueltigkeitsjahr: clampNumberValue(formEnhancements, 'ef_gueltigkeitsjahr', e.target.value) }))}
+        />
+      </div>
+    ),
+  };
+  const orderedFields = applyFieldOrder(Object.keys(fieldBlocks), formEnhancements.fieldOrder);
+  const orderedFieldsKey = orderedFields.map((it) => typeof it === 'string' ? it : it.row.join('+')).join(',');
 
-        {enablePhotoScan && (
-          <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-            <div>
-              <div className="flex items-center gap-1.5 font-medium">
-                <IconSparkles className="h-4 w-4 text-primary" />
-                KI-Assistent
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">Versteht Fotos, Dokumente und Text und füllt alles für dich aus</p>
-            </div>
+  // Render-Modell für Computed-Felder:
+  //
+  //   • BACKEND-FELDER mit computed-Eintrag (z.B. gesamtpreis bei einer
+  //     Katzenpension) bleiben als normales Eingabe-Feld stehen. Der Number-
+  //     Input nutzt den computed-Wert als Vorschlag, der User kann jederzeit
+  //     überschreiben (clearing → restore computed).
+  //   • VIRTUELLE computed-Keys (Eintrag in formEnhancements.computed, ABER
+  //     kein passendes Backend-Feld in orderedFields) erscheinen NICHT als
+  //     Input, sondern unten als kompakte 'Berechnungen'-Übersicht oder als
+  //     Inline-Hint unter dem letzten beitragenden Input.
+  const FIELD_LABELS: Record<string, string> = {"ef_bezeichnung": "Bezeichnung", "ef_scope": "Scope-Zuordnung", "ef_kategorie": "Kategorie", "ef_energietraeger": "Energieträger / Aktivität", "ef_einheit": "Einheit", "ef_faktor": "Emissionsfaktor (kg CO2e pro Einheit)", "ef_treibhausgas": "Treibhausgase", "ef_quelle": "Quelle / Referenz", "ef_gueltigkeitsjahr": "Gültigkeitsjahr"};
+  const CURRENCY_KEYS = new Set<string>([]);
+  // Applookup-Referenz-Labels: pro applookup-Feld in dieser Form (ownKey)
+  // eine Map { lookupKey: label } für ALLE Felder des Target-Schemas. Wird
+  // beim Render-Walk gefiltert auf die in der computed-Formel tatsächlich
+  // referenzierten lookupKeys (siehe applookupRefs unten).
+  const APPLOOKUP_LABELS: Record<string, Record<string, string>> = {};
+  const inputFields = useMemo(() => flattenFieldOrder(orderedFields), [orderedFieldsKey]);
+  const backendFieldSet = useMemo(() => new Set(inputFields), [inputFields.join(',')]);
+  const virtualComputed = useMemo(
+    () => Object.fromEntries(
+      Object.entries(formEnhancements.computed).filter(([k]) => !backendFieldSet.has(k)),
+    ),
+    [backendFieldSet],
+  );
+  const virtualFormEnhancements = useMemo(
+    () => ({ ...formEnhancements, computed: virtualComputed }),
+    [virtualComputed],
+  );
+  const computedLayout = useMemo(
+    () => classifyComputed(virtualFormEnhancements, inputFields, computedDeps),
+    [virtualFormEnhancements, inputFields.join(',')],
+  );
+  // Applookup-Referenzen: pro ownKey (Lookup-Feld im Form) die Liste der
+  // lookupKeys, die in irgendeiner computed-Formel referenziert werden.
+  // MODUS-1: aus dem Spec-Tree extrahiert. MODUS-2: aus dem Build-Time-
+  // Export computedApplookupRefs (parse-formulas hat Regex-Pairs gesammelt).
+  // Pro (ownKey, lookupKey)-Paar nur einmal; pro ownKey können aber mehrere
+  // lookupKeys gleichzeitig auftauchen (z.B. einzelpreis UND karten10_preis
+  // beim Yoga-Kurs), und alle werden separat als Inline-Hint gerendert.
+  const applookupRefs = useMemo(
+    () => mergeApplookupRefs(
+      extractApplookupRefs(formEnhancements.computed),
+      computedApplookupRefs,
+    ),
+    [],
+  );
+  function summaryLabel(k: string): string {
+    if (FIELD_LABELS[k]) return FIELD_LABELS[k];
+    // Leading underscore(s) als Virtual-Marker abstreifen; Unterstriche zu
+    // Leerzeichen, jedes Wort kapitalisieren. Umlaute kommen vom Sub-Agent
+    // direkt im Key (z. B. `_buchung_dauer_nächte`) — JS/TS/Vite unterstützen
+    // Unicode-Identifier nativ, daher keine ASCII-Transliteration nötig.
+    return k.replace(/^_+/, '')
+      .split('_')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+  }
+  function formatSummaryValue(k: string, v: unknown): string {
+    if (v === undefined || v === null || v === '' || (typeof v === 'number' && !Number.isFinite(v))) return '—';
+    const n = typeof v === 'number' ? v : Number(v);
+    if (!Number.isFinite(n)) return String(v);
+    // Backend-Feld mit €-Label ODER virtueller Computed-Key, dessen Name nach Geld aussieht.
+    const looksLikeCurrency = CURRENCY_KEYS.has(k) || /(?:kosten|preis|betrag|gesamt|netto|brutto|summe|mwst|rabatt|anzahlung|umsatz|saldo)/i.test(k);
+    if (looksLikeCurrency) {
+      return n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    return n.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+  }
+
+  return (
+    <>
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[92vh] flex flex-col overflow-hidden p-0 gap-0">
+        <DialogHeader className="px-6 pt-5 pb-3 border-b flex flex-row items-center gap-3 space-y-0">
+          <DialogTitle className="flex-1 truncate text-left">{DIALOG_INTENT}</DialogTitle>
+          {enablePhotoScan && (
+            <button
+              type="button"
+              onClick={() => setAiOpen(o => !o)}
+              aria-expanded={aiOpen}
+              aria-controls="ai-fill-panel"
+              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all mr-7 shadow-sm ${
+                aiOpen
+                  ? 'bg-primary text-primary-foreground ring-2 ring-primary/30'
+                  : 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/15 hover:border-primary/50'
+              }`}
+            >
+              <IconSparkles className={`h-3.5 w-3.5 ${aiOpen ? '' : 'text-primary'}`} />
+              <span className="hidden sm:inline">KI-Ausfüllen</span>
+              <IconChevronDown className={`h-3 w-3 transition-transform ${aiOpen ? 'rotate-180' : ''}`} />
+            </button>
+          )}
+        </DialogHeader>
+        {enablePhotoScan && aiOpen && (
+          <div id="ai-fill-panel" className="border-b bg-muted/20 px-6 py-4 space-y-3">
+            <p className="text-xs text-muted-foreground">Versteht Fotos, Dokumente und Text und füllt alles für dich aus</p>
             <div className="flex items-start gap-2 pl-0.5">
               <Checkbox
                 id="ai-use-personal-info"
@@ -357,227 +769,113 @@ export function EmissionsfaktorenDialog({ open, onClose, onSubmit, defaultValues
                 <IconSparkles className="h-3.5 w-3.5 mr-1.5" />Analysieren
               </Button>
             )}
-            <div className="flex justify-center pt-1">
-              <IconArrowBigDownLinesFilled className="h-8 w-8 text-muted-foreground/30" />
-            </div>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="ef_bezeichnung">Bezeichnung</Label>
-            <Input
-              id="ef_bezeichnung"
-              value={fields.ef_bezeichnung ?? ''}
-              onChange={e => setFields(f => ({ ...f, ef_bezeichnung: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ef_scope">Scope-Zuordnung</Label>
-            <Select
-              value={lookupKey(fields.ef_scope) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, ef_scope: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="ef_scope"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="scope1">Scope 1</SelectItem>
-                <SelectItem value="scope2">Scope 2</SelectItem>
-                <SelectItem value="scope3">Scope 3</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ef_kategorie">Kategorie</Label>
-            <Select
-              value={lookupKey(fields.ef_kategorie) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, ef_kategorie: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="ef_kategorie"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="stationaere_verbrennung">Stationäre Verbrennung</SelectItem>
-                <SelectItem value="mobile_verbrennung">Mobile Verbrennung</SelectItem>
-                <SelectItem value="prozessemissionen">Prozessemissionen</SelectItem>
-                <SelectItem value="fluechtige_emissionen">Flüchtige Emissionen</SelectItem>
-                <SelectItem value="strom">Eingekaufter Strom</SelectItem>
-                <SelectItem value="waerme">Eingekaufte Wärme</SelectItem>
-                <SelectItem value="kaelte">Eingekaufte Kälte</SelectItem>
-                <SelectItem value="dampf">Eingekaufter Dampf</SelectItem>
-                <SelectItem value="vorgelagert">Vorgelagerte Emissionen</SelectItem>
-                <SelectItem value="nachgelagert">Nachgelagerte Emissionen</SelectItem>
-                <SelectItem value="sonstige">Sonstige</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ef_energietraeger">Energieträger / Aktivität</Label>
-            <Input
-              id="ef_energietraeger"
-              value={fields.ef_energietraeger ?? ''}
-              onChange={e => setFields(f => ({ ...f, ef_energietraeger: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ef_einheit">Einheit</Label>
-            <Select
-              value={lookupKey(fields.ef_einheit) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, ef_einheit: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="ef_einheit"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="kwh">kWh</SelectItem>
-                <SelectItem value="mwh">MWh</SelectItem>
-                <SelectItem value="gj">GJ</SelectItem>
-                <SelectItem value="liter">Liter</SelectItem>
-                <SelectItem value="kg">kg</SelectItem>
-                <SelectItem value="tonne">Tonne</SelectItem>
-                <SelectItem value="m3">m³</SelectItem>
-                <SelectItem value="tkm">tkm</SelectItem>
-                <SelectItem value="pkm">Personenkilometer</SelectItem>
-                <SelectItem value="eur">EUR</SelectItem>
-                <SelectItem value="sonstige">Sonstige</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ef_faktor">Emissionsfaktor (kg CO2e pro Einheit)</Label>
-            <Input
-              id="ef_faktor"
-              type="number"
-              value={fields.ef_faktor ?? ''}
-              onChange={e => setFields(f => ({ ...f, ef_faktor: e.target.value ? Number(e.target.value) : undefined }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ef_treibhausgas">Treibhausgase</Label>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="ef_treibhausgas_co2"
-                  checked={lookupKeys(fields.ef_treibhausgas).includes('co2')}
-                  onCheckedChange={(checked) => {
-                    setFields(f => {
-                      const current = lookupKeys(f.ef_treibhausgas);
-                      const next = checked ? [...current, 'co2'] : current.filter(k => k !== 'co2');
-                      return { ...f, ef_treibhausgas: next.length ? next as any : undefined };
-                    });
-                  }}
-                />
-                <Label htmlFor="ef_treibhausgas_co2" className="font-normal">CO2</Label>
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0 min-w-0">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 space-y-4 min-w-0">
+            {(() => {
+              const renderField = (k: string) => {
+                const inlineHints = computedLayout.anchors[k] ?? [];
+                const refs = applookupRefs[k] ?? [];
+                return (
+                  <div key={k} className="space-y-1.5 min-w-0">
+                    {fieldBlocks[k]}
+                    {refs.map(({ lookupKey }) => {
+                      // Show the live numeric value the formula will pull from
+                      // the selected lookup target (e.g. "Monatspreis: 34,90 €"
+                      // under the Tarif combobox). Hidden while no lookup is
+                      // selected or the target field is non-numeric.
+                      const v = resolveApplookupRef(k, lookupKey, fields as Record<string, unknown>, computedContext);
+                      if (v === null) return null;
+                      const lbl = APPLOOKUP_LABELS[k]?.[lookupKey] ?? lookupKey;
+                      const text = formatSummaryValue(lookupKey, v);
+                      return (
+                        <div key={`alh-${k}-${lookupKey}`} className="flex items-center gap-1.5 pl-3 text-xs text-muted-foreground">
+                          <span className="text-primary/70">→</span>
+                          <span>{lbl}</span>
+                          <span className="ml-auto font-medium tabular-nums text-foreground">{text}</span>
+                        </div>
+                      );
+                    })}
+                    {inlineHints.map((cKey) => {
+                      const v = computedValues[cKey];
+                      const text = formatSummaryValue(cKey, v);
+                      if (text === '—') return null;
+                      return (
+                        <div key={cKey} className="flex items-center gap-1.5 pl-3 text-xs text-muted-foreground">
+                          <span className="text-primary/70">→</span>
+                          <span>{summaryLabel(cKey)}</span>
+                          <span className="ml-auto font-medium tabular-nums text-foreground">{text}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              };
+              return orderedFields.map((item, idx) => {
+                if (typeof item === 'string') return renderField(item);
+                const cols = item.cols ?? `repeat(${item.row.length}, minmax(0, 1fr))`;
+                return (
+                  <div key={`row-${idx}`} className="grid gap-3" style={{ gridTemplateColumns: cols }}>
+                    {item.row.map(renderField)}
+                  </div>
+                );
+              });
+            })()}
+            {(computedLayout.aggregates.length > 0 || computedLayout.finalTotal) && (
+              <div className="mt-6 pt-4 border-t border-border space-y-1.5">
+                {computedLayout.aggregates.length > 0 && (
+                  <dl className="space-y-1.5 pb-2">
+                    {computedLayout.aggregates.map((k) => {
+                      const userVal = (fields as Record<string, unknown>)[k];
+                      const computed = computedValues[k];
+                      const v = userVal !== undefined && userVal !== null && userVal !== '' ? userVal : computed;
+                      return (
+                        <div key={k} className="flex justify-between items-baseline gap-3">
+                          <dt className="text-sm text-muted-foreground truncate">{summaryLabel(k)}</dt>
+                          <dd className="text-sm font-medium tabular-nums whitespace-nowrap">{formatSummaryValue(k, v)}</dd>
+                        </div>
+                      );
+                    })}
+                  </dl>
+                )}
+                {computedLayout.finalTotal && (() => {
+                  const k = computedLayout.finalTotal;
+                  const userVal = (fields as Record<string, unknown>)[k];
+                  const computed = computedValues[k];
+                  const v = userVal !== undefined && userVal !== null && userVal !== '' ? userVal : computed;
+                  // Innere Border nur wenn aggregates existieren — sonst hätten wir
+                  // zwei direkt aufeinanderfolgende Striche (Outer + Inner) mit nur
+                  // einer Aggregat-Zeile dazwischen → zu viel visuelles Rauschen.
+                  const sep = computedLayout.aggregates.length > 0 ? 'pt-3 border-t border-border' : 'pt-1';
+                  return (
+                    <div className={`flex justify-between items-baseline gap-3 ${sep}`}>
+                      <span className="text-base font-semibold text-foreground">{summaryLabel(k)}</span>
+                      <span className="text-lg font-bold tabular-nums whitespace-nowrap text-foreground">{formatSummaryValue(k, v)}</span>
+                    </div>
+                  );
+                })()}
               </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="ef_treibhausgas_ch4"
-                  checked={lookupKeys(fields.ef_treibhausgas).includes('ch4')}
-                  onCheckedChange={(checked) => {
-                    setFields(f => {
-                      const current = lookupKeys(f.ef_treibhausgas);
-                      const next = checked ? [...current, 'ch4'] : current.filter(k => k !== 'ch4');
-                      return { ...f, ef_treibhausgas: next.length ? next as any : undefined };
-                    });
-                  }}
-                />
-                <Label htmlFor="ef_treibhausgas_ch4" className="font-normal">CH4</Label>
+            )}
+            {recordId && (
+              <div className="pt-2 border-t border-border">
+                <AttachmentsSection appId={APP_IDS.EMISSIONSFAKTOREN} recordId={recordId} />
               </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="ef_treibhausgas_n2o"
-                  checked={lookupKeys(fields.ef_treibhausgas).includes('n2o')}
-                  onCheckedChange={(checked) => {
-                    setFields(f => {
-                      const current = lookupKeys(f.ef_treibhausgas);
-                      const next = checked ? [...current, 'n2o'] : current.filter(k => k !== 'n2o');
-                      return { ...f, ef_treibhausgas: next.length ? next as any : undefined };
-                    });
-                  }}
-                />
-                <Label htmlFor="ef_treibhausgas_n2o" className="font-normal">N2O</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="ef_treibhausgas_hfc"
-                  checked={lookupKeys(fields.ef_treibhausgas).includes('hfc')}
-                  onCheckedChange={(checked) => {
-                    setFields(f => {
-                      const current = lookupKeys(f.ef_treibhausgas);
-                      const next = checked ? [...current, 'hfc'] : current.filter(k => k !== 'hfc');
-                      return { ...f, ef_treibhausgas: next.length ? next as any : undefined };
-                    });
-                  }}
-                />
-                <Label htmlFor="ef_treibhausgas_hfc" className="font-normal">HFC</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="ef_treibhausgas_pfc"
-                  checked={lookupKeys(fields.ef_treibhausgas).includes('pfc')}
-                  onCheckedChange={(checked) => {
-                    setFields(f => {
-                      const current = lookupKeys(f.ef_treibhausgas);
-                      const next = checked ? [...current, 'pfc'] : current.filter(k => k !== 'pfc');
-                      return { ...f, ef_treibhausgas: next.length ? next as any : undefined };
-                    });
-                  }}
-                />
-                <Label htmlFor="ef_treibhausgas_pfc" className="font-normal">PFC</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="ef_treibhausgas_sf6"
-                  checked={lookupKeys(fields.ef_treibhausgas).includes('sf6')}
-                  onCheckedChange={(checked) => {
-                    setFields(f => {
-                      const current = lookupKeys(f.ef_treibhausgas);
-                      const next = checked ? [...current, 'sf6'] : current.filter(k => k !== 'sf6');
-                      return { ...f, ef_treibhausgas: next.length ? next as any : undefined };
-                    });
-                  }}
-                />
-                <Label htmlFor="ef_treibhausgas_sf6" className="font-normal">SF6</Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="ef_treibhausgas_nf3"
-                  checked={lookupKeys(fields.ef_treibhausgas).includes('nf3')}
-                  onCheckedChange={(checked) => {
-                    setFields(f => {
-                      const current = lookupKeys(f.ef_treibhausgas);
-                      const next = checked ? [...current, 'nf3'] : current.filter(k => k !== 'nf3');
-                      return { ...f, ef_treibhausgas: next.length ? next as any : undefined };
-                    });
-                  }}
-                />
-                <Label htmlFor="ef_treibhausgas_nf3" className="font-normal">NF3</Label>
-              </div>
-            </div>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="ef_quelle">Quelle / Referenz</Label>
-            <Input
-              id="ef_quelle"
-              value={fields.ef_quelle ?? ''}
-              onChange={e => setFields(f => ({ ...f, ef_quelle: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ef_gueltigkeitsjahr">Gültigkeitsjahr</Label>
-            <Input
-              id="ef_gueltigkeitsjahr"
-              type="number"
-              value={fields.ef_gueltigkeitsjahr ?? ''}
-              onChange={e => setFields(f => ({ ...f, ef_gueltigkeitsjahr: e.target.value ? Number(e.target.value) : undefined }))}
-            />
-          </div>
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-            <Button type="submit" disabled={saving}>
+            <Button
+              type="submit"
+              disabled={saving || !isDirty}
+            >
               {saving ? 'Speichern...' : defaultValues ? 'Speichern' : 'Erstellen'}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
